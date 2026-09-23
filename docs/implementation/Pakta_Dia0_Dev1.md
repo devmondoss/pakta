@@ -97,3 +97,5 @@ Dev 2 debe reemplazar las direcciones de `demo-data.json`, reconstruir el workbo
 5. Definir quién opera el executor y cómo el kernel notifica la revocación al contrato antes de permitir nuevos pagos. Una revalidación local sin este paso no es una barrera on-chain.
 
 Ninguna de estas decisiones se considera cerrada por haber escrito este documento. El contrato de pago se implementa solo después de cerrarlas.
+
+La traducción de estas decisiones a las historias HU-D1 de `main` Scrum v3 está en `Pakta_Enmienda_Dev1_Scrum_v3.md`. Es una propuesta para revisar con Dev 2, no una edición unilateral del backlog compartido.

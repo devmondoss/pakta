@@ -123,6 +123,7 @@ pub enum DataKey {
 #[contracttype]
 pub struct Config {
     pub admin: Address,
+    pub treasury: Address,              // origen del fondeo y destino fijo de retiros
     pub executor: Address,              // settle requiere require_auth de este rol
     pub proof_issuers: Vec<BytesN<32>>,   // ed25519 pubkeys — MVP: 1
     pub issuer_threshold: u32,            // MVP: 1 (D6: multi-attestor sin redeploy)
@@ -151,7 +152,7 @@ pub struct Payable {
 ### 4.2 Entry points
 
 ```rust
-fn initialize(env, admin, executor, issuers: Vec<BytesN<32>>, threshold: u32,
+fn initialize(env, admin, treasury, executor, issuers: Vec<BytesN<32>>, threshold: u32,
               asset: Address, max_per_payable: i128,
               max_per_window: i128, window_seconds: u64);
 
