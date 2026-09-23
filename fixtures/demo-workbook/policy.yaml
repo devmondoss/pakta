@@ -1,0 +1,10 @@
+# Matches Pakta_Documento_Maestro.md §18.4 exactly, plus a policyVersion tag.
+policyVersion: "FIN-4.2"
+rules:
+  require_po: true
+  require_receipt: true
+  amount_tolerance_pct: 2
+  duplicate_detection: true
+  wallet_change_requires_human: true
+  auto_pay_below: "1000.00"
+  second_approval_above: "5000.00"

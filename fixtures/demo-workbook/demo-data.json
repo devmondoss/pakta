@@ -1,0 +1,126 @@
+{
+  "_comment": "Reconstructs the 5-invoice canonical demo from Pakta_Documento_Maestro.md §17.3/§25. Total 28,400.00 USDC due 2026-09-23. Source of truth for build-fixture.ts, which turns this into demo-workbook.xlsx.",
+
+  "vendors": [
+    {
+      "vendorId": "VEN-001",
+      "legalName": "CloudData Inc.",
+      "verificationStatus": "VERIFIED",
+      "wallet": {
+        "address": "GA1CD9F3KXQPLMN7R2WZT8VY",
+        "attestationStatus": "ATTESTED",
+        "version": 1,
+        "createdAt": "2026-01-10"
+      }
+    },
+    {
+      "vendorId": "VEN-002",
+      "legalName": "Northline Supplies",
+      "verificationStatus": "VERIFIED",
+      "wallet": {
+        "address": "GB4KP1M9XCLRQZ7N2WYT8VFH",
+        "attestationStatus": "ATTESTED",
+        "version": 1,
+        "createdAt": "2026-01-15"
+      }
+    },
+    {
+      "vendorId": "VEN-003",
+      "legalName": "Meridian Logistics",
+      "verificationStatus": "VERIFIED",
+      "wallet": {
+        "address": "GC7QT3N1XMLPRZ9K5WYH8VFJ",
+        "attestationStatus": "ATTESTED",
+        "version": 1,
+        "createdAt": "2026-02-01"
+      }
+    },
+    {
+      "vendorId": "VEN-004",
+      "legalName": "Arclight Components",
+      "verificationStatus": "VERIFIED",
+      "wallet": {
+        "address": "GAKX9F1D3RTMLPZQ7N2WYH5V",
+        "attestationStatus": "ATTESTED",
+        "version": 6,
+        "createdAt": "2026-03-05"
+      }
+    },
+    {
+      "vendorId": "VEN-005",
+      "legalName": "Harborview Services",
+      "verificationStatus": "VERIFIED",
+      "wallet": {
+        "address": "GE6YH2T9XMLQRZ4N1WVF7J0E",
+        "attestationStatus": "ATTESTED",
+        "version": 1,
+        "createdAt": "2026-01-20"
+      }
+    }
+  ],
+
+  "purchaseOrders": [
+    { "poId": "PO-72881", "vendorId": "VEN-001", "amount": "5000.00", "status": "OPEN", "approverId": "controller@pakta.demo" },
+    { "poId": "PO-70213", "vendorId": "VEN-002", "amount": "3500.00", "status": "OPEN", "approverId": "controller@pakta.demo" },
+    { "poId": "PO-71190", "vendorId": "VEN-003", "amount": "5000.00", "status": "OPEN", "approverId": "controller@pakta.demo" },
+    { "poId": "PO-73009", "vendorId": "VEN-004", "amount": "8000.00", "status": "OPEN", "approverId": "controller@pakta.demo" },
+    { "poId": "PO-73344", "vendorId": "VEN-005", "amount": "6400.00", "status": "OPEN", "approverId": "controller@pakta.demo" }
+  ],
+
+  "invoices": [
+    {
+      "_note": "Clean three-way match, wallet matches attested version -> READY",
+      "invoiceId": "INV-001", "poId": "PO-72881", "vendorId": "VEN-001",
+      "amount": "5000.00", "dueDate": "2026-09-23",
+      "walletAddress": "GA1CD9F3KXQPLMN7R2WZT8VY",
+      "sourceHash": "sha256:demo-inv-001"
+    },
+    {
+      "_note": "Same vendor+amount as a fingerprint pre-seeded as already-known in the kernel test context (simulates INV-1994, recorded 11 days earlier) -> DUPLICATE_INVOICE",
+      "invoiceId": "INV-002", "poId": "PO-70213", "vendorId": "VEN-002",
+      "amount": "3500.00", "dueDate": "2026-09-23",
+      "walletAddress": "GB4KP1M9XCLRQZ7N2WYT8VFH",
+      "sourceHash": "sha256:demo-inv-002"
+    },
+    {
+      "_note": "5500.00 > PO-71190's 5000.00 + 2% tolerance (5100.00) -> PO_AMOUNT_MISMATCH",
+      "invoiceId": "INV-003", "poId": "PO-71190", "vendorId": "VEN-003",
+      "amount": "5500.00", "dueDate": "2026-09-23",
+      "walletAddress": "GC7QT3N1XMLPRZ9K5WYH8VFJ",
+      "sourceHash": "sha256:demo-inv-003"
+    },
+    {
+      "_note": "walletAddress differs from VEN-004's attested wallet (GAKX9F1D...) -> VENDOR_WALLET_CHANGED",
+      "invoiceId": "INV-004", "poId": "PO-73009", "vendorId": "VEN-004",
+      "amount": "8000.00", "dueDate": "2026-09-23",
+      "walletAddress": "GD2RT5W8XKLQPZ1N6MYH9VFJ",
+      "sourceHash": "sha256:demo-inv-004"
+    },
+    {
+      "_note": "No matching RECEIPTS row for PO-73344 -> MISSING_RECEIPT",
+      "invoiceId": "INV-005", "poId": "PO-73344", "vendorId": "VEN-005",
+      "amount": "6400.00", "dueDate": "2026-09-23",
+      "walletAddress": "GE6YH2T9XMLQRZ4N1WVF7J0E",
+      "sourceHash": "sha256:demo-inv-005"
+    }
+  ],
+
+  "receipts": [
+    { "poId": "PO-72881", "confirmedQty": 1, "invoicedQty": 1, "confirmedBy": "ops@pakta.demo", "confirmedAt": "2026-09-20" },
+    { "poId": "PO-70213", "confirmedQty": 1, "invoicedQty": 1, "confirmedBy": "ops@pakta.demo", "confirmedAt": "2026-09-19" },
+    { "poId": "PO-71190", "confirmedQty": 1, "invoicedQty": 1, "confirmedBy": "ops@pakta.demo", "confirmedAt": "2026-09-18" },
+    { "poId": "PO-73009", "confirmedQty": 1, "invoicedQty": 1, "confirmedBy": "ops@pakta.demo", "confirmedAt": "2026-09-17" }
+  ],
+
+  "_approvals_note": "PO-71190/PO-73009/PO-73344 back invoices above policy.second_approval_above (5000.00), so each carries two approvals -- keeps each demo invoice's single isolated failure reason intact (no incidental APPROVAL_MISSING alongside the intended PO_AMOUNT_MISMATCH / VENDOR_WALLET_CHANGED / MISSING_RECEIPT).",
+  "approvals": [
+    { "objectType": "PO", "objectId": "PO-72881", "policyVersion": "FIN-4.2", "approverId": "controller@pakta.demo", "timestamp": "2026-09-15" },
+    { "objectType": "PO", "objectId": "PO-70213", "policyVersion": "FIN-4.2", "approverId": "controller@pakta.demo", "timestamp": "2026-09-15" },
+    { "objectType": "PO", "objectId": "PO-71190", "policyVersion": "FIN-4.2", "approverId": "controller@pakta.demo", "timestamp": "2026-09-15" },
+    { "objectType": "PO", "objectId": "PO-71190", "policyVersion": "FIN-4.2", "approverId": "cfo@pakta.demo", "timestamp": "2026-09-15" },
+    { "objectType": "PO", "objectId": "PO-73009", "policyVersion": "FIN-4.2", "approverId": "controller@pakta.demo", "timestamp": "2026-09-15" },
+    { "objectType": "PO", "objectId": "PO-73009", "policyVersion": "FIN-4.2", "approverId": "cfo@pakta.demo", "timestamp": "2026-09-15" },
+    { "objectType": "PO", "objectId": "PO-73344", "policyVersion": "FIN-4.2", "approverId": "controller@pakta.demo", "timestamp": "2026-09-15" },
+    { "objectType": "PO", "objectId": "PO-73344", "policyVersion": "FIN-4.2", "approverId": "cfo@pakta.demo", "timestamp": "2026-09-15" }
+  ]
+}
