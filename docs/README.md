@@ -19,6 +19,7 @@ Documentos operativos para el equipo de desarrollo: **cómo se construye** y **q
 |---|---|---|
 | [`implementation/Pakta_Plan_Implementacion.md`](implementation/Pakta_Plan_Implementacion.md) | `stack-tecnico` `arquitectura-de-servicios` `modelo-de-datos` `plan-de-ejecucion` `riesgos-tecnicos` | Stack técnico completo (frontend, backend, datos, AI, blockchain, infra), arquitectura de servicios del MVP y plan de ejecución por fases |
 | [`implementation/Pakta_Division_Trabajo.md`](implementation/Pakta_Division_Trabajo.md) | `equipo` `roles` `web3` `agentic-ai` `contrato-de-datos` | División de trabajo para un equipo de 2 devs: Web3/Settlement vs Agentic/AI Workflows, contrato de datos compartido y orden de integración |
+| [`implementation/Pakta_Arquitectura_Flujo.md`](implementation/Pakta_Arquitectura_Flujo.md) | `mermaid` `diagramas` `pipeline` `state-machine` `checkpoint` | Esquema y flujo técnico con diagramas Mermaid: pipeline end-to-end, máquina de estados del payable, secuencia del demo canónico, modelo de datos y stack — entregable de checkpoint de hackathon |
 
 ### `assets` — Diagramas y material visual
 Recursos visuales de referencia usados en la documentación y en pitches.
@@ -36,3 +37,4 @@ Recursos visuales de referencia usados en la documentación y en pitches.
 - **¿Vas a implementar el MVP?** → [`implementation/Pakta_Plan_Implementacion.md`](implementation/Pakta_Plan_Implementacion.md) para el stack y arquitectura de servicios.
 - **¿Eres parte del equipo de 2 devs?** → [`implementation/Pakta_Division_Trabajo.md`](implementation/Pakta_Division_Trabajo.md) para saber qué paquetes posees y el contrato de datos compartido.
 - **¿Necesitas un diagrama o imagen para una presentación?** → carpeta [`assets/`](assets/).
+- **¿Necesitas el esquema/flujo técnico para un checkpoint o jurado?** → [`implementation/Pakta_Arquitectura_Flujo.md`](implementation/Pakta_Arquitectura_Flujo.md).
