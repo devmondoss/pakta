@@ -1,10 +1,10 @@
 # Pakta — División de trabajo (2 devs)
 
-**Versión:** 2.0
+**Versión:** 3.0 — metodología Scrum aplicada
 **Fecha:** 23 de septiembre de 2026
 **Referencia:** `Pakta_Documento_Maestro.md` (tesis de producto), `Pakta_Plan_Implementacion.md` (stack completo) y `Pakta_Arquitectura_Flujo.md` (diagramas y roadmap)
 
-> Este documento define el corte exacto entre **Dev 1 (Web3 / Settlement)** y **Dev 2 (Agentic / AI Workflows)**, el contrato de datos que los conecta, y — a partir de esta versión — **checklists con checkpoints verificables por test**, no por sensación de "creo que ya quedó".
+> Corte exacto entre **Dev 1 (Web3 / Settlement)** y **Dev 2 (Agentic / AI Workflows)**, el contrato de datos que los conecta, y — desde esta versión — **sprints con historias de usuario, criterios de aceptación y Definition of Done por historia**, no un checkbox por semana.
 
 ---
 
@@ -18,31 +18,50 @@ Dev 1 hace que el pago SUCEDA en Stellar y quede probado.
 - **Dev 2** posee todo lo que ocurre **antes** de que exista un Proof-of-Payable: ingestion, AI extraction, deterministic control kernel, exceptions, y el propio Proof-of-Payable Builder.
 - **Dev 1** posee todo lo que ocurre **desde** que un Proof-of-Payable existe: el Settlement Adapter, el contrato Soroban, el indexer de eventos y la reconciliation on-chain.
 
-Ninguno de los dos toca el dominio del otro. Se comunican solo a través del contrato de datos de la sección 6.
+Ninguno de los dos toca el dominio del otro. Se comunican solo a través del contrato de datos de la sección 7.
 
 ---
 
-## 2. Metodología: cómo saber que algo está realmente terminado
+## 2. Metodología: Scrum aplicado a un equipo de 2
 
-Ningún checkbox de este documento se marca por opinión. Se marca porque existe una prueba automatizada (o, en el caso puntual de un deploy a testnet, una interacción real contra la red) que lo demuestra y que cualquiera puede volver a correr.
+Cada **semana de Fase 1 = un Sprint**. Cada Sprint tiene un **Sprint Goal** y se descompone en **historias de usuario** (formato "Como \<rol\>, quiero \<capacidad\>, para \<razón\>"), cada una con sus propios **criterios de aceptación** y su propia **Definition of Done verificable por comando** — así hay muchos checkpoints pequeños en vez de uno grande al final de la semana, y cualquiera (el otro dev, un jurado) puede confirmar el avance sin preguntar.
 
-| Nivel | Qué prueba | Cómo se verifica |
-|---|---|---|
-| **1 — Unit test** | Una función pura, aislada (una regla del kernel, un invariante del contrato) | `pnpm --filter <paquete> test` — el archivo de test correspondiente en verde |
-| **2 — Acceptance test** | El fixture completo (las 5 invoices canónicas) produce el resultado exacto documentado en el maestro | `pnpm test` en la raíz — el test end-to-end (`demo-fixture.test.ts` en Dev 2; su equivalente de contrato en Dev 1) |
-| **3 — Integration checkpoint** | Algo cruza la frontera del contrato de datos (sección 6) y el otro lado lo puede consumir sin tocarlo | Se prueba con datos reales del otro dev, no con mocks propios (ver sección 8) |
-| **4 — Demo end-to-end** | Todo el pipeline junto, incluyendo settlement real en Stellar testnet | Correr el demo script completo (`Pakta_Documento_Maestro.md` §25) de punta a punta |
+### Definition of Ready (antes de tomar una historia)
 
-Cada checkbox de las secciones 4 y 5 indica su nivel entre paréntesis. Un checkbox sin comando de verificación explícito **no se marca**, aunque el código "ya esté escrito".
+- [ ] Tiene criterios de aceptación escritos, no implícitos.
+- [ ] Sus dependencias ya existen (el contrato de datos, el fixture, la historia anterior de la que depende).
+- [ ] Se sabe de antemano qué test/comando la va a probar.
+
+### Definition of Done (aplica a **toda** historia, sin excepción)
+
+- [ ] Código escrito y el paquete compila (`tsc --noEmit` limpio, o `cargo build` limpio del lado Dev 1).
+- [ ] Tests de la historia en verde.
+- [ ] `pnpm test` (o `cargo test`) completo sigue en verde — no rompió nada que ya funcionaba.
+- [ ] Mergeado a `main` — una historia que vive solo en una rama local no cuenta como hecha.
+- [ ] Si introdujo una decisión de diseño no obvia, queda un comentario `// why` en el código, no solo en este doc.
+
+### Definition of Done — **plataforma completa** ("¿ya terminamos de construir Pakta?")
+
+La plataforma está terminada para el hackathon cuando **todo** lo siguiente es cierto a la vez, no una parte:
+
+- [ ] Las 8 reglas del kernel están implementadas y testeadas (Dev 2).
+- [ ] El contrato Soroban aplica los 4 invariantes de settlement y está desplegado en testnet (Dev 1).
+- [ ] AI Extraction Service convierte al menos PDF + email en `CanonicalPayable`, no solo el workbook (Dev 2).
+- [ ] Exception Service enruta y notifica de verdad (no solo produce el objeto `Exception`) (Dev 2).
+- [ ] Proof-of-Payable Builder entrega un `ProofOfPayable` real al Settlement Adapter, sin intervención manual (Dev 2 → Dev 1).
+- [ ] Settlement Adapter ejecuta un `transfer` real de USDC/SAC en testnet (Dev 1).
+- [ ] Event Indexer captura el evento y lo reconcilia contra el payable original (Dev 1).
+- [ ] Dashboard conectado a datos reales en los 5 módulos (Payables, Vendors & Wallets, Exceptions, Proof-of-Payable, Settlement/Reconciliación).
+- [ ] El demo script completo de `Pakta_Documento_Maestro.md` §25 corre de punta a punta con las 5 invoices, sin pasos manuales ocultos.
 
 ---
 
 ## 3. Día 0 — lo que se hace juntos antes de separarse
 
-- [x] Monorepo con pnpm workspaces (estructura base — `Turborepo` se agrega cuando haga falta cachear builds entre más paquetes, no antes).
-- [x] El paquete `packages/canonical-model` — tipos compartidos (`CanonicalPayable`, `Exception`, `Policy`, `ProofOfPayable`, `Settlement`). **Esto es el contrato entre los dos. Se edita en pareja, no unilateralmente.**
-- [ ] Esquema Postgres inicial (sección 5 del plan de implementación) — las tablas `payables`, `proofs` y `settlements` son la frontera física entre ambos dominios. *(no bloquea Fase 1: hoy el contrato de datos se prueba en memoria vía tests, Postgres entra en semana 2)*
-- [x] Acuerdo de que el mockup ya publicado (Pakta Control Room) es la referencia visual de comportamiento esperado.
+- [x] Monorepo con pnpm workspaces.
+- [x] `packages/canonical-model` — tipos compartidos. **Contrato entre los dos, se edita en pareja.**
+- [ ] Esquema Postgres inicial — *no bloquea Fase 1, entra en Sprint 2 cuando haga falta persistencia real.*
+- [x] Acuerdo de que el mockup (Pakta Control Room) es la referencia visual de comportamiento esperado.
 
 ---
 
@@ -50,49 +69,47 @@ Cada checkbox de las secciones 4 y 5 indica su nivel entre paréntesis. Un check
 
 **Pregunta que responde:** *"Dado un Proof-of-Payable válido, ¿cómo se mueve el dinero en Stellar de forma verificable, sin custodia y sin poder pagarse dos veces?"*
 
-### Paquetes que posee
-- `contracts/payable-contract/` (Soroban, Rust)
-- `packages/stellar-sdk-wrapper/`
-- Dentro de `apps/api/`: el **Settlement Adapter** y el **Event Indexer Worker**
+### Sprint 1 — Sprint Goal: *"Un contrato Soroban en testnet cuyo state machine y anti-replay están probados con tests, aunque todavía no mueva USDC real."*
 
-### Checklist — Semana 1
+| ID | Historia de usuario | Criterios de aceptación | Verificación (DoD) | Estado |
+|---|---|---|---|:---:|
+| HU-D1-01 | Como equipo, quiero un esqueleto de contrato desplegado en testnet, para validar el toolchain (Stellar CLI, `wasm32v1-none`) antes de invertir en lógica. | El contrato responde a `stellar contract invoke` real contra testnet. | `stellar contract deploy` exitoso + contract id documentado en README del paquete. | ⬜ |
+| HU-D1-02 | Como sistema, quiero el estado mínimo del `Payable` definido en storage persistente, para tener un modelo on-chain auditable. | `Payable { id, proof_hash, payer, recipient, asset, amount, policy_hash, expiry, status, nonce }` en storage `persistent`, no `temporary`. | Test que escribe y relee el struct. | ⬜ |
+| HU-D1-03 | Como org, quiero `register_payable()`, para dejar constancia on-chain de una obligación antes de tener su proof. | Rechaza `id` duplicado, `amount <= 0`, `expiry` pasado; requiere `payer.require_auth()`. | 4 tests unitarios (éxito + 3 rechazos). | ⬜ |
+| HU-D1-04 | Como proof issuer, quiero `submit_proof()`, para marcar un payable como `READY` cuando el kernel de Dev 2 ya lo verificó. | Solo transiciona desde `VERIFYING`; requiere `proof_issuer.require_auth()`; incrementa `nonce`. | 3 tests (transición válida, estado inválido, auth). | ⬜ |
+| HU-D1-05 | Como Vendor Master/Treasury, quiero `block_payable()` + `resolve_exception()`, para que el contrato refleje el ciclo de excepción-resolución, no solo éxito/fracaso. | `block_payable` legal desde `VERIFYING`/`READY`; `resolve_exception` legal solo desde `BLOCKED`; ambos incrementan `nonce`. | 4 tests (uno por transición + 1 de nonce). | ⬜ |
+| HU-D1-06 | Como proof issuer, quiero `revalidate()`, para reabrir la ventana de settlement con evidencia nueva, no con la vieja re-aprobada. | Exige `proof_hash`/`expiry` nuevos; legal solo desde `RESOLUTION_PENDING`; incrementa `nonce`. | 2 tests. | ⬜ |
+| HU-D1-07 | Como Treasury, quiero `settle()` a prueba de doble pago y de sustitución de destinatario. | (a) Solo si `status == READY`; (b) rechaza si expiró; (c) rechaza si el `nonce` no coincide; (d) **no recibe `recipient`/`amount` como parámetros** — solo usa lo ya guardado en `register_payable`; (e) transición atómica + evento. | 6 tests, uno por criterio + 1 de doble-settlement explícito. | ⬜ |
+| HU-D1-08 | Como sistema, quiero `expire()` permissionless, para que un payable vencido no quede colgado esperando que alguien lo cierre. | Legal desde cualquier estado no terminal si `now > expiry`; sin `require_auth()`. | 2 tests. | ⬜ |
 
-- [ ] Deploy de contrato Soroban vacío en testnet + pipeline de deploy (Stellar CLI en CI). *(nivel 4 — deploy real, contract id documentado)*
-- [ ] Estado mínimo del contrato definido (`Pakta_Plan_Implementacion.md` §3, `Pakta_Documento_Maestro.md` §19.1):
-  ```rust
-  Payable { id, proof_hash, payer, recipient, asset, amount, policy_hash, expiry, status, nonce }
-  ```
-- [ ] Entry points: `register_payable`, `submit_proof`, `block_payable`, `resolve_exception`, `revalidate`, `settle`, `expire`. *(nivel 1 — un test unitario por entry point)*
-- [ ] Invariantes probados con tests (§19.2 del maestro): *(nivel 1, todos deben tener su propio test)*
-  - [ ] No doble settlement
-  - [ ] `nonce` no reutilizable (anti-replay)
-  - [ ] `settle()` solo si `status == READY`
-  - [ ] Recipient/amount exactos, sin sustitución posible
+**Sprint Review 1:** `cargo test --package payable-contract` en verde (≥21 tests, uno por criterio de arriba) + el contract id de testnet documentado y probado con una invocación real.
 
-**✅ Checkpoint fin Semana 1:** `cargo test --package payable-contract` en verde cubriendo los 4 invariantes de arriba, y el contrato desplegado en testnet responde a `stellar contract invoke` real (no solo en tests locales).
+### Sprint 2 — Sprint Goal: *"El Settlement Adapter toma un `ProofOfPayable` real de Dev 2 y mueve USDC de verdad en testnet."*
 
-### Checklist — Semana 2
+| ID | Historia de usuario | Criterios de aceptación | Verificación (DoD) | Estado |
+|---|---|---|---|:---:|
+| HU-D1-09 | Como Treasury, quiero que `settle()` ejecute un transfer real de USDC vía SAC, no solo cambiar el status. | `token::Client::transfer(payer, recipient, amount)` dentro del mismo call atómico. | Test contra un token SAC de prueba + invocación real en testnet. | ⬜ |
+| HU-D1-10 | Como sistema, quiero un Settlement Adapter que reciba un `ProofOfPayable` (contrato de datos, sección 7) y decida el rail (SAC por defecto). | Acepta el shape exacto del contrato de datos sin transformarlo. | **Integration checkpoint**: probado contra un `ProofOfPayable` producido por Dev 2, no un mock propio. | ⬜ |
+| HU-D1-11 | Como cuenta Stellar, quiero autenticarme vía SEP-10 antes de que el adapter opere en su nombre. | Challenge/response SEP-10 completo contra testnet. | Test de integración con el Anchor Platform de testnet. | ⬜ |
 
-- [ ] Integración con Stellar Asset Contract (SAC) para transfer de USDC testnet.
-- [ ] `Settlement Adapter`: recibe un `ProofOfPayable` de Dev 2 (contrato de datos, sección 6), decide el rail (SAC por defecto) y ejecuta `settle()`. *(nivel 3 — probado contra un `ProofOfPayable` real producido por Dev 2, no un mock propio)*
-- [ ] SEP-10 para autenticación de cuentas Stellar.
+**Sprint Review 2:** un `ProofOfPayable` insertado por Dev 2 se liquida en testnet sin que Dev 1 toque su forma — la prueba de que el contrato de datos aguanta.
 
-**✅ Checkpoint fin Semana 2:** un `ProofOfPayable` insertado por Dev 2 se liquida en testnet sin que Dev 1 tenga que tocar su forma — prueba que el contrato de datos aguanta.
+### Sprint 3 — Sprint Goal: *"Todo lo que se liquida queda reconciliado de vuelta contra su payable original, sin intervención manual."*
 
-### Checklist — Semana 3
+| ID | Historia de usuario | Criterios de aceptación | Verificación (DoD) | Estado |
+|---|---|---|---|:---:|
+| HU-D1-12 | Como sistema, quiero un Event Indexer que consuma `getEvents` y escriba `Settlement`. | Captura `payable_ready`, `settlement_executed`, `payable_reconciled`. | Test contra un stream de eventos simulado + prueba real contra testnet. | ⬜ |
+| HU-D1-13 | Como Treasury, quiero revalidar justo antes de `settle()` que el proof no expiró y que amount/recipient no cambiaron (§14.3). | Un proof stale se rechaza aunque `status` siga en `READY`. | Test que fuerza un proof vencido y confirma el rechazo. | ⬜ |
+| HU-D1-14 | Como Accounting, quiero un export de reconciliación de vuelta a Excel/CSV. | Lee `settlements` + `payables`, no necesita saber cómo se generó el proof. | Test de exportación contra datos de settlement reales. | ⬜ |
 
-- [ ] Event Indexer Worker: consume `getEvents` de Stellar RPC y escribe `Settlement`.
-- [ ] Revalidation at execution time (§14.3 del maestro): antes de `settle()`, proof no expirado y amount/recipient sin cambios. *(nivel 1 — test que fuerza un proof stale y confirma el rechazo)*
-- [ ] Reconciliation export de vuelta a Excel/CSV.
-
-**✅ Checkpoint fin Semana 3 / Demo:** las 5 invoices del demo script (§25 del maestro) corren end-to-end — nivel 4.
+**Sprint Review 3 / Demo:** las 5 invoices del demo script (§25) corren end-to-end — nivel 4, la Definition of Done de plataforma completa.
 
 ### Fuera de su scope
 Parsing de documentos, prompts, extracción, reglas de negocio del kernel, UI del dashboard más allá de Settlement/Reconciliation.
 
 ### Riesgos
 - Replay de un proof ya usado → `nonce` en contrato + unicidad de `payable_id`.
-- Ventana entre proof generado y settlement ejecutado → revalidation check justo antes de `settle()`.
+- Ventana entre proof generado y settlement ejecutado → HU-D1-13.
 - Falla de posting a ERP después de settlement confirmado → `erp_posting_status` con reintentos.
 
 ---
@@ -101,55 +118,71 @@ Parsing de documentos, prompts, extracción, reglas de negocio del kernel, UI de
 
 **Pregunta que responde:** *"Dada una carpeta de Excel/PDF/email, ¿cómo se convierte eso en payables verificados, exceptions accionables, y finalmente en un Proof-of-Payable?"*
 
-### Paquetes que posee
-- `packages/canonical-model/` — tipos compartidos (construido en Día 0, mantenido por Dev 2)
-- `packages/ingestion/` — Ingestion Service
-- `packages/rules-kernel/` — Deterministic Control Kernel
-- Dentro de `apps/api/` (semana 2+): **AI Extraction Service**, **Exception Service**, **Proof-of-Payable Builder**
+### Sprint 1 — Sprint Goal: *"El fixture canónico de 5 invoices corre de punta a punta: workbook → payables → 1 READY + 4 BLOCKED exactos."* ✅ **Sprint completado**
 
-### Checklist — Semana 1 ✅ **completada**
+| ID | Historia de usuario | Criterios de aceptación | Verificación (DoD) | Estado |
+|---|---|---|---|:---:|
+| HU-D2-01 | Como sistema, quiero parsear un workbook `.xlsx`/`.csv` con sus 5 hojas y normalizarlo al Canonical Payable Model. | Dado un workbook válido, `ingestWorkbook()` devuelve N `CanonicalPayable` sin rechazos. | `pnpm --filter @pakta/ingestion test` | ✅ |
+| HU-D2-02 | Como sistema, quiero rechazar filas malformadas una por una, sin abortar el resto del batch. | Fila con monto inválido o `vendor_id` vacío se rechaza sola; el resto del batch se ingesta igual. | Test con fixture de filas malformadas (3 rechazadas, 1 válida). | ✅ |
+| HU-D2-03 | Como sistema, quiero aplicar `invoice.vendor_id == po.vendor_id` en ingestion, no en el kernel. | Una fila con PO de otro vendor se rechaza con `VENDOR_PO_MISMATCH`, no llega al kernel. | Test específico en `ingestWorkbook.test.ts`. | ✅ |
+| HU-D2-04 | Como Procurement, quiero que una factura que excede su PO más allá de la tolerancia quede bloqueada. | `invoice.amount > po.amount × (1 + tolerance)` ⇒ `reason=PO_AMOUNT_MISMATCH`, `owner=PROCUREMENT`. | `vendorAmountMatch.test.ts` (4 tests). | ✅ |
+| HU-D2-05 | Como Operations, quiero que una factura sin recepción confirmada, o con recepción parcial, quede bloqueada con el código correcto. | Sin receipt ⇒ `MISSING_RECEIPT`; receipt con qty menor ⇒ `PARTIAL_RECEIPT`. | `receiptCoverage.test.ts` (5 tests). | ✅ |
+| HU-D2-06 | Como AP, quiero detectar facturas duplicadas o ya liquidadas. | Fingerprint ya conocido ⇒ `DUPLICATE_INVOICE`; fingerprint ya settled ⇒ `PAYMENT_ALREADY_SETTLED`. | `duplicateCheck.test.ts` (4 tests). | ✅ |
+| HU-D2-07 | Como Vendor Master, quiero detectar wallets no atestiguadas o cambiadas. | Sin wallet atestiguada ⇒ `UNATTESTED_WALLET`; wallet distinta a la atestiguada ⇒ `VENDOR_WALLET_CHANGED` con `requiredAction="REVERIFY_VENDOR_WALLET"`. | `walletAttestation.test.ts` (4 tests). | ✅ |
+| HU-D2-08 | Como Controller, quiero exigir doble aprobación por encima de un monto. | Monto > `second_approval_above` con solo 1 approval ⇒ `APPROVAL_MISSING`. | `approvalThreshold.test.ts` (4 tests). | ✅ |
+| HU-D2-09 | Como sistema, quiero que `budget_available` y `proof_expiry` existan como reglas reales aunque no tengan datos que las activen todavía. | Ambas pasan (`ok:true`) cuando no hay fuente de budget/expiry, documentado como no-op deliberado, no como bug. | `structuralNoOps.test.ts` (6 tests). | ✅ |
+| HU-D2-10 | Como CFO, quiero correr las 5 invoices canónicas y obtener 1 READY + 4 BLOCKED con `reason_code`/`owner`/`required_action` exactos del maestro. | Totales: 28,400 solicitado / 5,000 ready / 23,400 bloqueado; determinístico entre corridas. | `demo-fixture.test.ts` (8 tests). | ✅ |
 
-- [x] Ingestion Service: parser de `.xlsx`/`.csv` (`VENDORS, PO, INVOICES, RECEIPTS, APPROVALS`), normalizado al Canonical Payable Model, rechazo fila-por-fila sin abortar el batch. *(nivel 1+2)*
-  → `pnpm --filter @pakta/ingestion test` — 4/4 passed
-- [x] Deterministic Control Kernel: las 8 reglas de §7.3, cada una en su propio archivo con test unitario aislado. *(nivel 1)*
-  → `pnpm --filter @pakta/rules-kernel test` — todas las reglas cubiertas, incluyendo las 2 estructuralmente no-op (`budget`, `proof_expiry`) documentadas como tal
-- [x] Fixture canónico de 5 invoices (28,400 USDC) reconstruido en `fixtures/demo-workbook/`. *(nivel 2)*
-- [x] Test de aceptación end-to-end: 1 READY + 4 BLOCKED con `reason_code`/`owner_role`/`required_action` exactos del maestro (incluye el string literal `"REVERIFY_VENDOR_WALLET"` de §5.3).
-
-**✅ Checkpoint fin Semana 1 — CUMPLIDO:**
+**Sprint Review 1 — CUMPLIDO:**
 ```bash
-pnpm install
-pnpm test        # 45/45 passed
-pnpm typecheck    # clean
+pnpm install && pnpm test && pnpm typecheck
 ```
-Verificado en `main` (commit `f032fa0` en adelante).
+→ 45/45 tests, typecheck limpio. Verificado en `main` desde el commit `f032fa0`.
 
-### Checklist — Semana 2
+### Sprint 2 — Sprint Goal: *"Una factura real en PDF o email, no solo del fixture, produce el mismo `CanonicalPayable` que hoy produce el workbook — y las excepciones se enrutan de verdad."*
 
-- [ ] AI Extraction Service: parsing de invoice PDF/email (LangGraph + Claude Agent SDK / Google ADK), con `confidence` y `source_excerpt` por campo. Escribe a `extraction_proposals`, nunca directo a `payables`. *(nivel 1 — tests por tipo de documento + un test que prueba que la IA nunca escribe directo al kernel)*
-- [ ] Exception Service: reason codes de §10 con `owner_role`, `required_action` y notificación real (hoy el kernel produce el objeto `Exception`; falta el routing). *(nivel 1)*
-- [ ] Vendor wallet attestation flow (módulo Vendors & Wallets del mockup). *(nivel 1)*
+| ID | Historia de usuario | Criterios de aceptación | Verificación (DoD) | Estado |
+|---|---|---|---|:---:|
+| HU-D2-11 | Como AP, quiero que un PDF de invoice se lea automáticamente (LangGraph + Claude Agent SDK/ADK) con un nivel de confianza por campo. | Extrae vendor, monto, PO ref, wallet; cada campo con `confidence` y `source_excerpt`. | Test contra ≥3 PDFs de muestra con distinto layout. | ⬜ |
+| HU-D2-12 | Como sistema, quiero que la salida de IA nunca se escriba directo a `payables`. | Toda extracción pasa por `extraction_proposals`; el kernel re-verifica contra fuentes deterministas antes de aceptar. | Test que fuerza una alucinación del modelo y confirma que no contamina el payable final. | ⬜ |
+| HU-D2-13 | Como sistema, quiero leer invoices que llegan por email (inbox), no solo PDFs sueltos. | Un correo con adjunto PDF produce el mismo resultado que HU-D2-11. | Test de integración con un inbox de prueba. | ⬜ |
+| HU-D2-14 | Como owner de una excepción, quiero recibir el `reason`/`owner`/`required_action` enrutado a mi bandeja, no solo verlo en un objeto interno. | Notificación real (email/webhook) por cada `Exception` nueva. | Test con un webhook de prueba que confirma el payload recibido. | ⬜ |
+| HU-D2-15 | Como Vendor Master, quiero un flujo de reverificación de wallet cuando cambia, antes de que se levante el flag `wallet` en evidence. | Módulo Vendors & Wallets del mockup conectado: wallet pendiente → confirmación → `attestationStatus=ATTESTED`. | Test de integración del flujo completo de attestation. | ⬜ |
 
-**✅ Checkpoint fin Semana 2:** una factura PDF real, no del fixture, entra por AI Extraction y produce el mismo tipo de `CanonicalPayable` que hoy produce `ingestWorkbook()` — prueba que ambas fuentes convergen al mismo modelo.
+**Sprint Review 2:** una factura PDF real entra por AI Extraction y produce un `CanonicalPayable` que el kernel evalúa exactamente igual que uno salido del workbook — misma prueba de convergencia de modelo, ahora con fuente distinta.
 
-### Checklist — Semana 3
+### Sprint 3 — Sprint Goal: *"El pipeline completo, incluyendo el hand-off a Dev 1 y el dashboard, corre sin pasos manuales."*
 
-- [ ] Proof-of-Payable Builder: arma el objeto de §6.1 y lo entrega vía el contrato de datos (sección 6) — el hand-off hacia Dev 1. *(nivel 3)*
-- [ ] Dashboard conectado a datos reales: Payables, Vendors & Wallets, Exceptions, Proof-of-Payable.
-- [ ] Ensayo del demo script completo (§25) hasta el punto justo antes del settlement real.
+| ID | Historia de usuario | Criterios de aceptación | Verificación (DoD) | Estado |
+|---|---|---|---|:---:|
+| HU-D2-16 | Como sistema, quiero un Proof-of-Payable Builder que arme el objeto de §6.1 apenas un payable llega a `READY`. | Genera el shape exacto del contrato de datos (sección 7), sin campos faltantes. | Test contra el schema `ProofOfPayable` de `@pakta/canonical-model`. | ⬜ |
+| HU-D2-17 | Como Dev 1, quiero recibir el `ProofOfPayable` sin tener que transformarlo. | **Integration checkpoint**: Dev 1 lo consume tal cual, sin adaptador intermedio. | Corrida conjunta con el Settlement Adapter de Dev 1. | ⬜ |
+| HU-D2-18 | Como CFO, quiero ver Payables/Vendors & Wallets/Exceptions/Proof-of-Payable con datos reales en el dashboard, no el mockup con datos fijos. | Los 4 módulos leen del backend real, no de arrays hardcodeados. | Prueba manual + smoke test de cada endpoint. | ⬜ |
+| HU-D2-19 | Como equipo, quiero ensayar el demo script completo (§25) hasta el punto justo antes del settlement real. | Las 5 invoices, 2 resoluciones, revalidación — todo sin intervención manual salvo el `settle()` final de Dev 1. | Corrida en vivo, grabada o en vivo ante el equipo. | ⬜ |
 
-**✅ Checkpoint fin Semana 3 / Demo:** mismo checkpoint que Dev 1, nivel 4 — las 5 invoices corriendo end-to-end con settlement real.
+**Sprint Review 3 / Demo:** mismo checkpoint que Dev 1 — nivel 4, Definition of Done de plataforma completa (sección 2).
 
 ### Fuera de su scope
 El contrato Soroban, el SDK de Stellar, la ejecución de `settle()`, el indexer de eventos.
 
 ### Riesgos
-- AI extraction alucina un campo que el kernel trata como válido → nunca escribir directo a `payables`; todo pasa por `extraction_proposals` con `confidence`, y el kernel re-verifica contra fuentes deterministas.
+- AI extraction alucina un campo que el kernel trata como válido → HU-D2-12 existe específicamente por esto.
 - Prompt injection desde el contenido de un invoice/email → todo el contenido del documento se trata como dato, nunca como instrucción.
 
 ---
 
-## 6. El contrato de datos (la única superficie compartida)
+## 6. Tablero resumen (dónde estamos hoy)
+
+| Sprint | Dev 1 — Web3/Settlement | Dev 2 — Agentic/AI |
+|---|:---:|:---:|
+| Sprint 1 | ⬜ 0/8 historias | ✅ 10/10 historias |
+| Sprint 2 | ⬜ 0/3 historias | ⬜ 0/5 historias |
+| Sprint 3 | ⬜ 0/3 historias | ⬜ 0/4 historias |
+| **Total Fase 1** | **0/14** | **10/19** |
+
+---
+
+## 7. El contrato de datos (la única superficie compartida)
 
 No se coordinan por reuniones — se coordinan por este esquema. Vive en `packages/canonical-model` (`src/proof.ts`, ya construido y con tests) y ninguno lo cambia sin avisar al otro.
 
@@ -192,7 +225,7 @@ Regla de oro: **Dev 1 nunca lee `extraction_proposals` ni las reglas del kernel.
 
 ---
 
-## 7. Qué pasa con el frontend
+## 8. Qué pasa con el frontend
 
 El dashboard (mockup ya publicado — Pakta Control Room) no se divide por dominio, se divide por módulo, y cada quien conecta su propio módulo a datos reales:
 
@@ -206,21 +239,4 @@ El dashboard (mockup ya publicado — Pakta Control Room) no se divide por domin
 
 ---
 
-## 8. Checkpoints de integración (orden sugerido)
-
-| # | Momento | Qué se prueba | Nivel | Estado |
-|---|---|---|:---:|:---:|
-| 1 | Días 1-2 | Cada uno trabaja aislado con las 5 invoices del fixture | 1-2 | ✅ Dev 2 · ⬜ Dev 1 |
-| 2 | Fin semana 1 | Dev 2 inserta un `ProofOfPayable` de prueba; Dev 1 confirma que su Settlement Adapter lo toma sin cambios | 3 | ⬜ (depende de que Dev 1 tenga contrato + adapter) |
-| 3 | Fin semana 2 | Flujo completo con al menos 1 invoice real, de punta a punta | 3 | ⬜ |
-| 4 | Fin semana 3 | Las 5 invoices del demo script corriendo end-to-end, dashboard conectado | 4 | ⬜ |
-
-**Checkpoint 1 detallado (el que ya se cumplió del lado Dev 2):**
-```bash
-pnpm install && pnpm test && pnpm typecheck
-```
-→ 45/45 tests, typecheck limpio, fixture de 5 invoices produce 1 READY + 4 BLOCKED exactos. Esto es lo que un tercero (jurado, el otro dev) puede correr sin contexto adicional para confirmar que "Semana 1 de Dev 2" no es una afirmación, es un resultado reproducible.
-
----
-
-*Este documento asume el stack y las fases definidas en `Pakta_Plan_Implementacion.md` y los diagramas de `Pakta_Arquitectura_Flujo.md`. Cualquier cambio de alcance en Fase 2 (connectors, policy builder, supplier portal) se reparte con el mismo criterio: Dev 1 = lo que toca Stellar/contrato, Dev 2 = lo que toca ingestion/AI/reglas/exceptions — y todo checkbox nuevo lleva su comando de verificación.*
+*Este documento asume el stack y las fases de `Pakta_Plan_Implementacion.md` y los diagramas de `Pakta_Arquitectura_Flujo.md`. Fase 2 (connectors, policy builder, supplier portal) se reparte con el mismo criterio y el mismo formato: historias de usuario con criterios de aceptación y DoD verificable por comando.*
