@@ -9,7 +9,7 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "pnpm --filter './packages/*' exec tsc --noEmit",
+    "typecheck": "node scripts/typecheck.mjs",
     "build:fixture": "tsx fixtures/demo-workbook/build-fixture.ts"
   },
   "devDependencies": {

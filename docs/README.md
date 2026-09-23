@@ -20,6 +20,8 @@ Documentos operativos para el equipo de desarrollo: **cómo se construye** y **q
 | [`implementation/Pakta_Plan_Implementacion.md`](implementation/Pakta_Plan_Implementacion.md) | `stack-tecnico` `arquitectura-de-servicios` `modelo-de-datos` `plan-de-ejecucion` `riesgos-tecnicos` | Stack técnico completo (frontend, backend, datos, AI, blockchain, infra), arquitectura de servicios del MVP y plan de ejecución por fases |
 | [`implementation/Pakta_Division_Trabajo.md`](implementation/Pakta_Division_Trabajo.md) | `equipo` `roles` `web3` `agentic-ai` `contrato-de-datos` | División de trabajo para un equipo de 2 devs: Web3/Settlement vs Agentic/AI Workflows, contrato de datos compartido y orden de integración |
 | [`implementation/Pakta_Arquitectura_Flujo.md`](implementation/Pakta_Arquitectura_Flujo.md) | `mermaid` `diagramas` `pipeline` `state-machine` `checkpoint` | Esquema y flujo técnico con diagramas Mermaid: pipeline end-to-end, máquina de estados del payable, secuencia del demo canónico, modelo de datos y stack — entregable de checkpoint de hackathon |
+| [`implementation/Pakta_Plan_Web3_Stellar.md`](implementation/Pakta_Plan_Web3_Stellar.md) | `web3` `stellar` `soroban` `settlement` `agentic` `plan-de-ejecucion` | Plan de desarrollo del dominio Dev 1: decisiones de arquitectura (custodia, hash canónico, proof issuer), diseño del contrato `payable-contract` con sus invariantes, discrepancias del contrato de datos a resolver con Dev 2, plan semanal con checkpoints verificables y la capa agentic de settlement (Settlement Agent + MCP) |
+| [`implementation/Pakta_Dia0_Dev1.md`](implementation/Pakta_Dia0_Dev1.md) | `web3` `dia-0` `handoff` `proof-v1.1` | Relectura de documentos y código, propuesta de contrato de datos para negociar con Dev 2, direcciones testnet públicas, riesgos de firma/custodia/TTL y pruebas del scaffold |
 
 ### `assets` — Diagramas y material visual
 Recursos visuales de referencia usados en la documentación y en pitches.
@@ -36,5 +38,7 @@ Recursos visuales de referencia usados en la documentación y en pitches.
 - **¿Quieres entender el producto?** → empieza por [`product/Pakta_Documento_Maestro.md`](product/Pakta_Documento_Maestro.md) (secciones 1-6) o el [brief de 2 páginas](product/Pacta_Brief_2_Paginas.pdf).
 - **¿Vas a implementar el MVP?** → [`implementation/Pakta_Plan_Implementacion.md`](implementation/Pakta_Plan_Implementacion.md) para el stack y arquitectura de servicios.
 - **¿Eres parte del equipo de 2 devs?** → [`implementation/Pakta_Division_Trabajo.md`](implementation/Pakta_Division_Trabajo.md) para saber qué paquetes posees y el contrato de datos compartido.
+- **¿Vas a construir el settlement en Stellar/Soroban?** → [`implementation/Pakta_Plan_Web3_Stellar.md`](implementation/Pakta_Plan_Web3_Stellar.md) para las decisiones de arquitectura, el diseño del contrato y el plan semanal de Dev 1.
+- **¿Vas a coordinar el Día 0 entre Dev 1 y Dev 2?** → [`implementation/Pakta_Dia0_Dev1.md`](implementation/Pakta_Dia0_Dev1.md) para la propuesta v1.1, wallets de testnet y decisiones pendientes.
 - **¿Necesitas un diagrama o imagen para una presentación?** → carpeta [`assets/`](assets/).
 - **¿Necesitas el esquema/flujo técnico para un checkpoint o jurado?** → [`implementation/Pakta_Arquitectura_Flujo.md`](implementation/Pakta_Arquitectura_Flujo.md).
