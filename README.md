@@ -52,7 +52,7 @@ Invoice, PO, receipt, monto, presupuesto y firma del agente pueden estar perfect
 
 ## 🏗️ Arquitectura
 
-![Arquitectura de Pakta](mermaid-diagram.png)
+![Arquitectura de Pakta](docs/assets/mermaid-diagram.png)
 
 | Capa | Responsabilidad |
 |---|---|
@@ -104,9 +104,11 @@ Pakta **no custodia fondos**: la empresa conserva sus keys o smart account; el c
 
 ## 📄 Documentación
 
-- [`Pakta_Documento_Maestro.md`](Pakta_Documento_Maestro.md) — tesis de producto completa, arquitectura, modelo de excepciones, threat model y referencias
-- [`Pakta_Plan_Implementacion.md`](Pakta_Plan_Implementacion.md) — stack técnico, arquitectura de servicios y plan de ejecución por fases
-- [`Pakta_Division_Trabajo.md`](Pakta_Division_Trabajo.md) — división de trabajo del equipo (Web3/Settlement vs Agentic/AI)
+Toda la documentación vive en [`docs/`](docs/), organizada por categoría (`product`, `implementation`, `assets`) con sus tags — ver el [índice completo](docs/README.md).
+
+- [`docs/product/Pakta_Documento_Maestro.md`](docs/product/Pakta_Documento_Maestro.md) — tesis de producto completa, arquitectura, modelo de excepciones, threat model y referencias
+- [`docs/implementation/Pakta_Plan_Implementacion.md`](docs/implementation/Pakta_Plan_Implementacion.md) — stack técnico, arquitectura de servicios y plan de ejecución por fases
+- [`docs/implementation/Pakta_Division_Trabajo.md`](docs/implementation/Pakta_Division_Trabajo.md) — división de trabajo del equipo (Web3/Settlement vs Agentic/AI)
 
 ---
 
