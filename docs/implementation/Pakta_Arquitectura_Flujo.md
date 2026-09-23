@@ -1,16 +1,73 @@
-# Pakta — Arquitectura y Flujo Técnico
+# Pakta — Esquema y Flujo Técnico
 
 **Checkpoint intermedio — hackathon**
 **Fecha:** 23 de septiembre de 2026
 **Repositorio:** https://github.com/devmondoss/pakta
 
-> Esquema y flujo de lo que estamos construyendo: pipeline end-to-end, máquina de estados del payable, secuencia del demo canónico, modelo de datos y stack. Referencia completa: [`product/Pakta_Documento_Maestro.md`](../product/Pakta_Documento_Maestro.md) · [`implementation/Pakta_Plan_Implementacion.md`](Pakta_Plan_Implementacion.md) · [`implementation/Pakta_Division_Trabajo.md`](Pakta_Division_Trabajo.md).
+> Qué problema resolvemos, cómo se resuelve hoy sin Pakta, cómo lo resuelve Pakta, el pipeline técnico completo, el stack y qué está construido hasta este checkpoint. Documentación completa: [`product/Pakta_Documento_Maestro.md`](../product/Pakta_Documento_Maestro.md) · [`implementation/Pakta_Plan_Implementacion.md`](Pakta_Plan_Implementacion.md) · [`implementation/Pakta_Division_Trabajo.md`](Pakta_Division_Trabajo.md).
 
 ---
 
-## 1. Pipeline end-to-end
+## 1. El problema
 
-De la evidencia cruda (Excel, PDF, email) a un settlement verificable en Stellar y de vuelta a reconciliation. Los subgrafos marcan quién construye cada bloque (ver `Pakta_Division_Trabajo.md`).
+Una SME tiene los mismos problemas de Accounts Payable que una gran empresa —facturas duplicadas, órdenes de compra que no cuadran, recepciones sin confirmar, cambios de wallet/cuenta bancaria del proveedor, aprobaciones pendientes, reconciliación manual— pero no tiene el stack de SAP/AWS/Bitwave para resolverlos. La evidencia vive repartida en Excel, PDFs, correos y, cuando existe, un software contable. Nadie tiene una vista única de "¿esta obligación está realmente lista para pagarse?" antes de que el dinero salga.
+
+### Flujo tradicional (sin Pakta)
+
+```mermaid
+flowchart LR
+    A1["📧 Invoice llega<br/>por PDF o email"] --> B1["👤 AP la revisa<br/>a mano"]
+    B1 --> C1["🔍 Busca la PO<br/>en otro sistema/Excel"]
+    C1 --> D1["📞 Pregunta a Operations<br/>si el servicio llegó"]
+    D1 --> E1["📋 Busca el approval<br/>en otro hilo de correo"]
+    E1 --> F1{"¿Todo cuadra?"}
+    F1 -->|"no está seguro"| G1["⏳ Retrasa semanas<br/>o paga igual 'para no atrasar'"]
+    F1 -->|"cree que sí"| H1["💸 Paga manualmente"]
+    G1 --> H1
+    H1 --> I1["📊 Reconcilia a mano<br/>en Excel, días después"]
+    I1 --> J1["🚨 Duplicado, wallet<br/>equivocada o fraude<br/>se descubre tarde"]
+
+    classDef pain fill:#f6c9c4,stroke:#b73b3b,color:#5a1414
+    class A1,B1,C1,D1,E1,G1,I1,J1 pain
+```
+
+**El costo real:** 63% de equipos de AP dedica más de 10 horas/semana a procesar invoices, 66% todavía hace entrada manual al ERP (IFOL, 2025), y 79% de organizaciones sufrió intentos de fraude de pagos en 2024 (AFP, 2025) — buena parte por cambios de cuenta/wallet del proveedor no verificados.
+
+---
+
+## 2. La solución — Pakta
+
+Pakta se conecta con la evidencia que la empresa **ya tiene** (Excel, PDFs, email), usa AI para leerla y relacionarla, pero **nunca deja que un modelo probabilístico autorice un pago**: un motor de reglas determinístico decide si el payable está listo, y solo entonces se emite un **Proof-of-Payable** que habilita el settlement en Stellar. Cuando algo no cuadra, no es un error genérico — es una excepción tipada con dueño y acción exacta, que se revalida sola en cuanto se resuelve.
+
+### Flujo propuesto (con Pakta)
+
+```mermaid
+flowchart LR
+    A1["📊 Excel / CSV"] --> ING["Ingestion Service"]
+    A2["📧 PDF / Email"] --> AI["AI Extraction"]
+    ING --> CPM["Canonical Payable Model"]
+    AI --> CPM
+    CPM --> KER["Deterministic<br/>Control Kernel"]
+    KER -->|"❌ excepción"| EXC["Exception Service<br/>dueño + acción exacta"]
+    EXC -->|"resuelto"| KER
+    KER -->|"✅ listo"| PRF["Proof-of-Payable<br/>Builder"]
+    PRF --> SET["Settlement Adapter"]
+    SET --> SC["Soroban Contract"]
+    SC --> STL[("Stellar<br/>USDC")]
+    STL --> IDX["Event Indexer"]
+    IDX --> REC["Reconciliación<br/>de vuelta al Excel/ERP"]
+
+    classDef good fill:#dff0e6,stroke:#177a51,color:#0d3d29
+    class ING,AI,CPM,KER,EXC,PRF,SET,SC,STL,IDX,REC good
+```
+
+> **La diferencia:** el payment rail responde "¿podemos mover el dinero?". Pakta responde **"¿esta obligación específica está realmente lista para pagarse, a este destinatario, por este monto, ahora?"** — antes de que el dinero se mueva, no después.
+
+---
+
+## 3. Pipeline técnico end-to-end
+
+Mismo flujo de arriba, ahora con el detalle de quién construye cada bloque (ver `Pakta_Division_Trabajo.md`): **Dev 2** posee todo lo anterior al Proof-of-Payable, **Dev 1** todo lo posterior.
 
 ```mermaid
 flowchart LR
@@ -54,9 +111,62 @@ flowchart LR
 
 ---
 
-## 2. Máquina de estados del `Payable`
+## 4. Qué hemos construido hasta este checkpoint
 
-Un único state machine, coherente entre lo que corre en `@pakta/rules-kernel` (off-chain) y lo que va a aplicar el contrato Soroban (on-chain, capa de Dev 1).
+```mermaid
+flowchart LR
+    A1["Excel / CSV"] --> B["Ingestion Service"]
+    A2["PDF"] --> C["AI Extraction"]
+    A3["Email"] --> C
+    B --> D["Canonical Payable Model"]
+    C --> D
+    D --> E["Deterministic Control Kernel"]
+    E -->|blocked| F["Exception Service<br/>routing/notificaciones"]
+    F --> E
+    E -->|ready| G["Proof-of-Payable Builder"]
+    G --> H["Settlement Adapter"]
+    H --> I["Soroban Contract"]
+    I --> J[("Stellar / USDC")]
+    J --> K["Event Indexer"]
+    K --> L["Reconciliación"]
+
+    classDef built fill:#1a9c6b,stroke:#0d5c3f,color:#ffffff,font-weight:bold
+    classDef nextup fill:#e3a94f,stroke:#8a5f10,color:#2b1c00,font-weight:bold
+    classDef planned fill:#c7cbd1,stroke:#5c6270,color:#1b1d24
+
+    class A1,B,D,E built
+    class A2,A3,C,F,G nextup
+    class H,I,J,K,L planned
+```
+
+🟢 **Construido y testeado** (`tonny-dev` → `main`, 45/45 tests) · 🟠 **Siguiente en la fila** · ⚪ **Planeado**
+
+| Módulo | Estado | Detalle |
+|---|:---:|---|
+| Ingestion Service (`@pakta/ingestion`) | 🟢 | `.xlsx`/`.csv` → Canonical Payable Model, ExcelJS, rechazo fila-por-fila sin abortar el batch |
+| Canonical Payable Model (`@pakta/canonical-model`) | 🟢 | Schemas Zod (Vendor, PO, Invoice, Receipt, Approval, Exception) + contrato `ProofOfPayable`/`Settlement` compartido con Dev 1 |
+| Deterministic Control Kernel (`@pakta/rules-kernel`) | 🟢 | Las 8 reglas de §7.3, mapeadas 1:1 a `reason_code`/`owner_role`/`required_action` de §10 |
+| Fixture del demo canónico (5 invoices, 28,400 USDC) | 🟢 | End-to-end: 1 READY + 4 BLOCKED exactos, reproducible con `pnpm test` |
+| AI Extraction Service (PDF/email → structured output) | 🟠 | Semana 2 |
+| Exception Service (routing/notificaciones reales) | 🟠 | Semana 2 — hoy el kernel produce el objeto `Exception`, falta el enrutamiento/notificación |
+| Proof-of-Payable Builder | 🟠 | Semana 3 |
+| Soroban Contract (`payable-contract`) | ⚪ | Dev 1 — no iniciado en este checkpoint |
+| Settlement Adapter + Event Indexer | ⚪ | Dev 1 |
+| Dashboard conectado a datos reales | ⚪ | Mockup ya prototipado, falta conectar a la API |
+
+**Resultado verificable hoy:**
+```bash
+pnpm install
+pnpm test        # 45/45 passed
+pnpm typecheck    # clean
+```
+Corre el fixture canónico de 5 invoices y produce, de forma determinística, 1 payable `READY` + 4 `BLOCKED` con el `reason_code`/`owner_role`/`required_action` exactos del documento maestro.
+
+---
+
+## 5. Máquina de estados del `Payable`
+
+Coherente entre lo que corre en `@pakta/rules-kernel` (off-chain, ya construido) y lo que va a aplicar el contrato Soroban (on-chain, Dev 1).
 
 ```mermaid
 stateDiagram-v2
@@ -88,9 +198,9 @@ stateDiagram-v2
 
 ---
 
-## 3. Secuencia del demo canónico (5 invoices, `fixtures/demo-workbook`)
+## 6. Secuencia del demo canónico (5 invoices, `fixtures/demo-workbook`)
 
-Corrida real contra el fixture ya implementado — no es hipotética, es el test de aceptación `demo-fixture.test.ts` (45/45 tests en verde a la fecha de este checkpoint).
+Corrida real contra el fixture ya implementado — no es hipotética, es el test de aceptación `demo-fixture.test.ts`.
 
 ```mermaid
 sequenceDiagram
@@ -131,9 +241,9 @@ sequenceDiagram
 
 ---
 
-## 4. Modelo de datos — Canonical Payable Model
+## 7. Modelo de datos — Canonical Payable Model
 
-Implementado en `@pakta/canonical-model` (Zod, en `packages/canonical-model/src/schemas.ts`, `exception.ts`, `proof.ts`).
+Implementado en `@pakta/canonical-model` (`packages/canonical-model/src/schemas.ts`, `exception.ts`, `proof.ts`).
 
 ```mermaid
 erDiagram
@@ -203,50 +313,26 @@ erDiagram
 
 ---
 
-## 5. Stack técnico
+## 8. Stack técnico
 
 | Capa | Tecnología | Estado |
-|---|---|---|
-| Modelo de datos compartido | TypeScript + Zod 4.6.5 (`@pakta/canonical-model`) | ✅ Construido |
-| Ingestion (Excel/CSV → Canonical Payable Model) | ExcelJS 4.4.0 (`@pakta/ingestion`) | ✅ Construido |
-| Deterministic Control Kernel | TypeScript puro, decimal.js (`@pakta/rules-kernel`) | ✅ Construido — 8 reglas de §7.3 |
-| Policy config | YAML (`js-yaml`) validado con Zod en el borde | ✅ Construido |
-| AI Extraction Service | Claude (structured output / tool use) | ⏳ Semana 2 |
-| Exception Service (routing/notificaciones) | Fastify + BullMQ (planeado) | ⏳ Semana 2 |
-| Proof-of-Payable Builder | TypeScript (`@pakta/canonical-model` types) | ⏳ Semana 3 |
-| Smart contract | Soroban / Rust (`contracts/payable-contract`) | ⏳ Dev 1 — no iniciado en este checkpoint |
-| Settlement | Stellar SDK + Stellar CLI, USDC/SAC, testnet | ⏳ Dev 1 |
-| Event Indexer | Stellar RPC `getEvents` | ⏳ Dev 1 |
-| Base de datos | PostgreSQL (Supabase) | ⏳ Semana 2 |
-| Runtime / tooling | Node 24, pnpm 12.6.0 (workspaces), TypeScript 7.0.2, Vitest 5.0.1 | ✅ Configurado |
-| Frontend / dashboard | Next.js + React (mockup ya prototipado, pendiente de conectar a datos reales) | 🎨 Mockup listo |
+|---|---|:---:|
+| Modelo de datos compartido | TypeScript + Zod 4.6.5 (`@pakta/canonical-model`) | 🟢 |
+| Ingestion (Excel/CSV → Canonical Payable Model) | ExcelJS 4.4.0 (`@pakta/ingestion`) | 🟢 |
+| Deterministic Control Kernel | TypeScript puro, decimal.js (`@pakta/rules-kernel`) | 🟢 |
+| Policy config | YAML (`js-yaml`) validado con Zod en el borde | 🟢 |
+| AI Extraction Service | Claude (structured output / tool use) | 🟠 |
+| Exception Service (routing/notificaciones) | Fastify + BullMQ (planeado) | 🟠 |
+| Proof-of-Payable Builder | TypeScript (`@pakta/canonical-model` types) | 🟠 |
+| Smart contract | Soroban / Rust (`contracts/payable-contract`) | ⚪ |
+| Settlement | Stellar SDK + Stellar CLI, USDC/SAC, testnet | ⚪ |
+| Event Indexer | Stellar RPC `getEvents` | ⚪ |
+| Base de datos | PostgreSQL (Supabase) | ⚪ |
+| Runtime / tooling | Node 24, pnpm 12.6.0 (workspaces), TypeScript 7.0.2, Vitest 5.0.1 | 🟢 |
+| Frontend / dashboard | Next.js + React | 🎨 mockup listo, falta conectar |
 
 ---
 
-## 6. Estado actual del repo (este checkpoint)
+## 9. Próximo paso
 
-```text
-pakta/
-├── docs/                         # tesis de producto, plan, división de trabajo
-├── packages/
-│   ├── canonical-model/          # ✅ schemas Zod + contrato ProofOfPayable/Settlement
-│   ├── ingestion/                # ✅ ingestWorkbook() — xlsx/csv → Canonical Payable Model
-│   └── rules-kernel/             # ✅ evaluatePayable/evaluateBatch — 8 reglas + reason codes
-├── fixtures/demo-workbook/       # ✅ dataset canónico de 5 invoices (28,400 USDC)
-├── contracts/                    # ⏳ payable-contract (Soroban) — pendiente, Dev 1
-└── apps/                         # ⏳ api (Fastify) + web (dashboard) — pendiente
-```
-
-**Resultado verificable hoy:** correr el fixture canónico de 5 invoices produce, de forma determinística, **1 payable READY + 4 BLOCKED** con el `reason_code`/`owner_role`/`required_action` exactos del documento maestro — 45/45 tests en verde, typecheck limpio.
-
-```bash
-pnpm install
-pnpm test        # 45/45 passed
-pnpm typecheck    # clean
-```
-
----
-
-## 7. Próximo paso
-
-Dev 1 arranca `contracts/payable-contract` (Soroban): estado mínimo del `Payable`, los 7 entry points (`register_payable`, `submit_proof`, `block_payable`, `resolve_exception`, `revalidate`, `settle`, `expire`) y los invariantes de no-doble-settlement / no-sustitución de recipient-amount. Deploy de un esqueleto a testnet como primer hito verificable.
+Dev 1 arranca `contracts/payable-contract` (Soroban): estado mínimo del `Payable`, los 7 entry points (`register_payable`, `submit_proof`, `block_payable`, `resolve_exception`, `revalidate`, `settle`, `expire`) y los invariantes de no-doble-settlement / no-sustitución de recipient-amount. Deploy de un esqueleto a testnet como primer hito verificable. En paralelo, Dev 2 conecta AI Extraction (Claude) para PDF/email y arma el Exception Service real.
