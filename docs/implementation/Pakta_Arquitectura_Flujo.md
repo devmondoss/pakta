@@ -3,12 +3,18 @@
 **Checkpoint intermedio — hackathon**
 **Fecha:** 23 de septiembre de 2026
 **Repositorio:** https://github.com/devmondoss/pakta
-**Track:** 01 — AI Agents & Automated Workflows
-
-> *"Programas o bots que pagan y cobran solos, sin que una persona apruebe cada movimiento — por ejemplo, un asistente que le paga automáticamente a otro programa por un servicio, o que reparte dinero entre varias personas según reglas que tú defines."*
-> Pakta encaja directo: el agent es quien decide *qué* pagar, pero el pago mismo solo se ejecuta cuando el Deterministic Control Kernel confirma que la obligación cumple las reglas que la empresa definió — la autonomía del agente vive dentro de esas reglas, nunca por fuera de ellas.
 
 > Qué problema resolvemos, cómo se resuelve hoy sin Pakta, cómo lo resuelve Pakta, la arquitectura completa (frontend, backend, datos, agentic/AI, blockchain, infra), el diagrama de procesos, el diagrama de datos, el diagrama de construcción (roadmap) y qué está construido hasta este checkpoint. Documentación completa: [`product/Pakta_Documento_Maestro.md`](../product/Pakta_Documento_Maestro.md) · [`implementation/Pakta_Plan_Implementacion.md`](Pakta_Plan_Implementacion.md) · [`implementation/Pakta_Division_Trabajo.md`](Pakta_Division_Trabajo.md).
+
+---
+
+## 0. Track del hackathon
+
+**Track 01 — AI Agents & Automated Workflows**
+
+> *"Programas o bots que pagan y cobran solos, sin que una persona apruebe cada movimiento — por ejemplo, un asistente que le paga automáticamente a otro programa por un servicio, o que reparte dinero entre varias personas según reglas que tú defines."*
+
+Pakta encaja directo: el agente es quien decide **qué** pagar, pero el pago mismo solo se ejecuta cuando el Deterministic Control Kernel confirma que la obligación cumple las reglas que la empresa definió — la autonomía del agente vive **dentro** de esas reglas, nunca por fuera de ellas.
 
 ---
 
