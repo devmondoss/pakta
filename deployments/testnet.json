@@ -1,6 +1,6 @@
 {
   "_comment": "Versioned deployment manifest for Stellar testnet. Pakta_Division_Trabajo.md §7 requires the Proof-of-Payable Builder and the Settlement Adapter to read asset_contract_id from a manifest rather than hardcoding it, so that registration_digest is always bound to the deployment it was issued for. Public identifiers only — no seeds, ever.",
-  "version": 2,
+  "version": 3,
   "generatedAt": "2026-09-24",
   "network": {
     "name": "testnet",
@@ -28,8 +28,8 @@
       "wasmHash": "0a45b3eb59992209c6d6cc69e499bbe66bc646355d5a07c3732c9817448a36e6",
       "deployTx": "36e66d1dc225b47a0e68a3c7e58a3582cb6bd575851ef921b9049b004932dd2c",
       "contractVersion": 2,
-      "initialized": false,
-      "_comment": "Deployed but NOT initialized. `initialize` is the single call that picks the custody model (Pakta_Plan_Implementacion.md §2.5): set `payer` to this contract id for the vault model, or to an external treasury account to require its signature on every settle. Same code either way, so the decision stays open without blocking the build."
+      "initialized": true,
+      "_comment": "Initialized with the capped vault model: Config.payer is this same contract id, so it transfers from its own funded balance with no human signature per payment. Verified end to end on testnet by scripts/testnet-settle.ts."
     },
     "payableGateScaffold": {
       "contractId": "CB5GBGSEAHW3QWVZL25BQU672MHF7UBRAGD4PA3T5V57RQO7LMKJHA2N",
@@ -53,6 +53,9 @@
     "_comment": "Transactions proving the asset path works end to end, before any contract logic exists.",
     "sacDeploy": "786e22b520c936e0fab54b5ed12c95e6e8696df7395dfa7f409dfa714969e8d3",
     "sacTransferToVendor": "2d4ab9845e65a68c87d814a57eb1661ab73b3730763444a5cd1b107898394441",
-    "sacTransferNote": "5000.0000000 USDC (50000000000 units) distributor -> VEN-001, the exact INV-001 amount from Pakta_Documento_Maestro.md §25. Emitted a `transfer` event, which is the shape the Event Indexer will consume."
+    "sacTransferNote": "5000.0000000 USDC (50000000000 units) distributor -> VEN-001, the exact INV-001 amount from Pakta_Documento_Maestro.md §25. Emitted a `transfer` event, which is the shape the Event Indexer will consume.",
+    "registerPayable": "591cc660377f6b0e53a13917783f637c9fa012e2b61cbd25c19aa8be99152140",
+    "settle": "c2001f73217090e30069f513eab8f7999428667a24de5caf26ab3f3ed370ddc4",
+    "functionalCheck": "scripts/testnet-settle.ts: signed register, substituted-recipient rejected on-chain, exact-amount settle, double settle rejected, non-executor settle rejected."
   }
 }

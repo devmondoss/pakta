@@ -25,6 +25,7 @@ export class StrKeyError extends Error {
 export const VERSION_BYTE = {
   accountId: 6 << 3, // 'G'
   contract: 2 << 3, // 'C'
+  secretSeed: 18 << 3, // 'S'
 } as const;
 
 const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
@@ -119,6 +120,22 @@ export function decodeAccountId(accountId: string): Uint8Array {
 /** `C...` -> 32 raw bytes of the contract id. */
 export function decodeContractId(contractId: string): Uint8Array {
   return decodeStrKey(contractId, VERSION_BYTE.contract, "contract id");
+}
+
+/**
+ * `S...` -> the 32 raw seed bytes of an Ed25519 private key.
+ *
+ * Shares the checksum-validating decoder above rather than being hand-rolled
+ * somewhere else, because a silently mis-decoded seed produces a valid-looking
+ * signature from the wrong key.
+ *
+ * Callers handle a secret from here on. It must never be logged, written to a
+ * file in the repository, put in an error message, or sent anywhere. Today the
+ * only caller is `scripts/testnet-settle.ts`, which reads the seed from an
+ * environment variable and keeps it in memory.
+ */
+export function decodeSecretSeed(seed: string): Uint8Array {
+  return decodeStrKey(seed, VERSION_BYTE.secretSeed, "secret seed");
 }
 
 /** True when the string is a well-formed account id, checksum included. Never throws. */

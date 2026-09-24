@@ -65,6 +65,44 @@ se archiva, el id vuelve a ser registrable. Por eso `PAYABLE_TTL_LEDGERS` es ~30
 y hay un `const _: () = assert!(...)` en `lib.rs` que **no compila** si alguien baja
 ese margen.
 
+## Prueba funcional end-to-end
+
+`get_config` solo prueba que el gate quedó configurado. Lo que prueba que el money
+path funciona es esto:
+
+```bash
+PAKTA_ISSUER_SECRET=$(stellar keys secret pakta_issuer) pnpm testnet:settle
+```
+
+El script arma un proof, calcula `proof_hash` con JCS, deriva el `registration_digest`,
+lo firma con la llave del issuer, registra, liquida, y comprueba los saldos a ambos
+lados. Antes de gastar una transacción verifica que la llave provista sea de verdad el
+issuer que el contrato tiene configurado. Corrida real contra testnet:
+
+| Paso | Resultado |
+|---|---|
+| `register_payable` con firma válida | ✅ `READY` on-chain |
+| Mismo proof con recipient sustituido | ✅ rechazado, `Error(Crypto, InvalidInput)` |
+| `settle` | ✅ 5000.0000000 USDC exactos, vault → vendor |
+| Segundo `settle` del mismo payable | ✅ rechazado, `Error(Contract, #6)` = `NotReady` |
+| `settle` desde un caller que no es el executor | ✅ rechazado |
+
+Eventos emitidos, que son lo que consumirá el Event Indexer:
+
+```text
+PayableRegistered   payable_id, proof_hash
+PayableReady        payable_id, recipient, amount, expiry
+transfer            (del SAC) vault -> vendor, USDC:GBGTS43Q…
+SettlementExecuted  payable_id, recipient, amount, proof_hash
+```
+
+`SettlementExecuted` carga el `proof_hash`, así que la cadena tx ↕ settlement ↕ proof
+de `Pakta_Documento_Maestro.md` §25 se recorre sin una segunda consulta.
+
+Transacciones: [register](https://stellar.expert/explorer/testnet/tx/591cc660377f6b0e53a13917783f637c9fa012e2b61cbd25c19aa8be99152140) · [settle](https://stellar.expert/explorer/testnet/tx/c2001f73217090e30069f513eab8f7999428667a24de5caf26ab3f3ed370ddc4)
+
+El seed del issuer se pasa por variable de entorno y nunca se escribe en el repo.
+
 ## Despliegue en testnet
 
 | | |

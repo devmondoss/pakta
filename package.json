@@ -10,7 +10,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "node scripts/typecheck.mjs",
-    "build:fixture": "tsx fixtures/demo-workbook/build-fixture.ts"
+    "build:fixture": "tsx fixtures/demo-workbook/build-fixture.ts",
+    "contract:test": "cargo test --manifest-path contracts/Cargo.toml --workspace",
+    "contract:build": "stellar contract build --manifest-path contracts/payable-contract/Cargo.toml",
+    "contract:fmt": "cargo fmt --manifest-path contracts/Cargo.toml --all -- --check",
+    "testnet:settle": "tsx scripts/testnet-settle.ts"
   },
   "devDependencies": {
     "typescript": "7.0.2",
