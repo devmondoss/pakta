@@ -22,7 +22,12 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { proofHash, registrationDigest, isoToUnixSeconds } from "../packages/proof-hash/src/index.js";
+import {
+  proofHash,
+  registrationDigest,
+  revocationDigest,
+  isoToUnixSeconds,
+} from "../packages/proof-hash/src/index.js";
 import { decodeSecretSeed, decimalToUnits } from "../packages/stellar-sdk-wrapper/src/index.js";
 
 const manifest = JSON.parse(
@@ -282,6 +287,129 @@ async function main() {
   }
   process.stdout.write("rechazado ✅\n");
 
+  // --- Treasury safety -----------------------------------------------------
+
+  const committed = () =>
+    BigInt(
+      stellar(["contract", "invoke", "--id", GATE, "--source", ADMIN_KEY, "--network", NETWORK,
+        "--", "get_committed"]).replace(/"/g, ""),
+    );
+  const availableNow = () =>
+    BigInt(
+      stellar(["contract", "invoke", "--id", GATE, "--source", ADMIN_KEY, "--network", NETWORK,
+        "--", "get_available"]).replace(/"/g, ""),
+    );
+
+  section("8. committed / available");
+  process.stdout.write(`committed: ${committed()}, available: ${availableNow()}\n`);
+  if (committed() !== 0n) {
+    throw new Error("nada debería seguir comprometido después de liquidar");
+  }
+
+  section("9. withdraw por encima de lo disponible (debe fallar)");
+  const overdraw = stellarAllowingFailure([
+    "contract", "invoke", "--id", GATE, "--source", ADMIN_KEY, "--network", NETWORK, "--send=yes",
+    "--", "withdraw", "--amount", (availableNow() + 1n).toString(),
+  ]);
+  if (overdraw.ok) {
+    throw new Error("FALLO CRÍTICO: el vault entregó más de lo disponible");
+  }
+  process.stdout.write(
+    `rechazado ✅  (${overdraw.output.match(/Error\(Contract, #\d+\)/)?.[0] ?? "error de contrato"})\n`,
+  );
+
+  section("10. Revocación firmada por el issuer");
+  // A second payable, registered and then cancelled instead of paid. This is
+  // the on-chain brake for evidence that went stale after the proof was issued.
+  const revokedId = `${businessId}-REVOKE`;
+  const revokedIdHash = sha256Hex(revokedId);
+  const revokedProofHash = proofHash({ ...unsignedProof, payable_id: revokedId });
+  const revokeRegistration = signWithSeed(
+    issuerSeed,
+    registrationDigest({ ...digestInput, payableId: revokedId, proofHash: revokedProofHash }),
+  );
+  invokeAndGetTx([
+    "contract", "invoke", "--id", GATE, "--source", ADMIN_KEY, "--network", NETWORK, "--send=yes",
+    "--", "register_payable",
+    "--payable_id", revokedIdHash,
+    "--proof_hash", revokedProofHash,
+    "--recipient", vendor,
+    "--amount", amountUnits.toString(),
+    "--policy_hash", sha256Hex(policyVersion),
+    "--expiry", String(expiry),
+    "--signatures", JSON.stringify([
+      { issuer: configuredIssuer, signature: hex(revokeRegistration.signature) },
+    ]),
+  ]);
+  const committedAfterRegister = committed();
+  const availableAfterRegister = availableNow();
+  process.stdout.write(`tras registrar -> committed ${committedAfterRegister}, available ${availableAfterRegister}\n`);
+  if (committedAfterRegister !== amountUnits) {
+    throw new Error("registrar debió comprometer exactamente el monto del payable");
+  }
+
+  const revocation = signWithSeed(
+    issuerSeed,
+    revocationDigest({
+      networkPassphrase: PASSPHRASE,
+      contractId: GATE,
+      payableId: revokedId,
+      proofHash: revokedProofHash,
+    }),
+  );
+  const revokeTx = invokeAndGetTx([
+    "contract", "invoke", "--id", GATE, "--source", ADMIN_KEY, "--network", NETWORK, "--send=yes",
+    "--", "revoke_payable",
+    "--payable_id", revokedIdHash,
+    "--reason_code", "WALLET",
+    "--signatures", JSON.stringify([
+      { issuer: configuredIssuer, signature: hex(revocation.signature) },
+    ]),
+  ]);
+  process.stdout.write(`tx: ${revokeTx.tx}\n`);
+  for (const event of revokeTx.events) process.stdout.write(`   evento: ${event}\n`);
+
+  const revokedState = JSON.parse(
+    stellar(["contract", "invoke", "--id", GATE, "--source", ADMIN_KEY, "--network", NETWORK,
+      "--", "get_payable", "--payable_id", revokedIdHash]),
+  );
+  process.stdout.write(`estado: ${statusLabel(revokedState.status)}\n`);
+  process.stdout.write(`tras revocar   -> committed ${committed()}, available ${availableNow()}\n`);
+  if (committed() !== 0n) {
+    throw new Error("revocar debió liberar lo comprometido");
+  }
+  if (availableNow() !== availableAfterRegister + amountUnits) {
+    throw new Error("revocar debió devolver el monto al pool disponible");
+  }
+
+  const settleRevoked = stellarAllowingFailure([
+    "contract", "invoke", "--id", GATE, "--source", EXECUTOR_KEY, "--network", NETWORK, "--send=yes",
+    "--", "settle", "--payable_id", revokedIdHash,
+  ]);
+  if (settleRevoked.ok) {
+    throw new Error("FALLO CRÍTICO: un payable revocado se liquidó");
+  }
+  process.stdout.write("un payable revocado no se puede liquidar ✅\n");
+
+  section("11. withdraw dentro de lo disponible");
+  const treasuryAddress = JSON.parse(
+    stellar(["contract", "invoke", "--id", GATE, "--source", ADMIN_KEY, "--network", NETWORK, "--", "get_config"]),
+  ).treasury as string;
+  const treasuryBefore = balanceOf(treasuryAddress);
+  const withdrawAmount = 1_000n * 10_000_000n;
+
+  const withdrawTx = invokeAndGetTx([
+    "contract", "invoke", "--id", GATE, "--source", ADMIN_KEY, "--network", NETWORK, "--send=yes",
+    "--", "withdraw", "--amount", withdrawAmount.toString(),
+  ]);
+  process.stdout.write(`tx: ${withdrawTx.tx}\n`);
+  for (const event of withdrawTx.events) process.stdout.write(`   evento: ${event}\n`);
+
+  if (balanceOf(treasuryAddress) - treasuryBefore !== withdrawAmount) {
+    throw new Error("el treasury no recibió el monto exacto");
+  }
+  process.stdout.write("el treasury recibió el monto exacto ✅\n");
+
   section("Resultado");
   process.stdout.write(
     [
@@ -290,6 +418,11 @@ async function main() {
       "settle transfirió el monto exacto  ✅",
       "doble settle rechazado             ✅",
       "settle sin executor rechazado      ✅",
+      "withdraw sobre lo disponible ✗     ✅",
+      "revocación firmada por issuer      ✅",
+      "revocar liberó lo comprometido     ✅",
+      "payable revocado no liquidable     ✅",
+      "withdraw al treasury               ✅",
       "",
       `estado final : ${statusLabel(JSON.parse(stellar(["contract", "invoke", "--id", GATE, "--source", ADMIN_KEY, "--network", NETWORK, "--", "get_payable", "--payable_id", payableIdHash])).status)}`,
       `register tx  : https://stellar.expert/explorer/testnet/tx/${registerTx.tx}`,

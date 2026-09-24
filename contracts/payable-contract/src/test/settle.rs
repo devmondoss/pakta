@@ -80,9 +80,11 @@ fn a_revoked_payable_cannot_settle() {
     // The on-chain brake for stale evidence (Pakta_Division_Trabajo.md §4): without
     // it, off-chain revalidation is advice the gate cannot enforce.
     let h = Harness::vault();
-    let id = h.register(&h.proposal(6, 5_000 * ONE_USDC));
+    let proposal = h.proposal(6, 5_000 * ONE_USDC);
+    let id = h.register(&proposal);
 
-    h.client.revoke_payable(&id, &symbol_short!("WALLET"));
+    h.client
+        .revoke_payable(&id, &symbol_short!("WALLET"), &h.sign_revocation(&proposal));
     assert_eq!(h.client.get_payable(&id).unwrap().status, Status::Revoked);
 
     assert_eq!(h.client.try_settle(&id), Err(Ok(Error::NotReady)));
@@ -92,11 +94,13 @@ fn a_revoked_payable_cannot_settle() {
 #[test]
 fn a_settled_payable_cannot_be_revoked_afterwards() {
     let h = Harness::vault();
-    let id = h.register(&h.proposal(7, 5_000 * ONE_USDC));
+    let proposal = h.proposal(7, 5_000 * ONE_USDC);
+    let id = h.register(&proposal);
     h.client.settle(&id);
 
     assert_eq!(
-        h.client.try_revoke_payable(&id, &symbol_short!("WALLET")),
+        h.client
+            .try_revoke_payable(&id, &symbol_short!("WALLET"), &h.sign_revocation(&proposal)),
         Err(Ok(Error::NotReady))
     );
     assert_eq!(h.client.get_payable(&id).unwrap().status, Status::Settled);
@@ -105,13 +109,16 @@ fn a_settled_payable_cannot_be_revoked_afterwards() {
 #[test]
 fn revocation_is_idempotent_in_effect() {
     let h = Harness::vault();
-    let id = h.register(&h.proposal(8, 5_000 * ONE_USDC));
-    h.client.revoke_payable(&id, &symbol_short!("WALLET"));
+    let proposal = h.proposal(8, 5_000 * ONE_USDC);
+    let id = h.register(&proposal);
+    h.client
+        .revoke_payable(&id, &symbol_short!("WALLET"), &h.sign_revocation(&proposal));
 
     // A second revoke is refused rather than silently re-applied, and the
     // status is unchanged either way.
     assert_eq!(
-        h.client.try_revoke_payable(&id, &symbol_short!("WALLET")),
+        h.client
+            .try_revoke_payable(&id, &symbol_short!("WALLET"), &h.sign_revocation(&proposal)),
         Err(Ok(Error::NotReady))
     );
     assert_eq!(h.client.get_payable(&id).unwrap().status, Status::Revoked);

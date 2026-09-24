@@ -1,6 +1,6 @@
 {
   "_comment": "Versioned deployment manifest for Stellar testnet. Pakta_Division_Trabajo.md §7 requires the Proof-of-Payable Builder and the Settlement Adapter to read asset_contract_id from a manifest rather than hardcoding it, so that registration_digest is always bound to the deployment it was issued for. Public identifiers only — no seeds, ever.",
-  "version": 3,
+  "version": 4,
   "generatedAt": "2026-09-24",
   "network": {
     "name": "testnet",
@@ -20,21 +20,34 @@
   "accounts": {
     "usdcIssuer": "GBGTS43QDFGCNZXN36JVASTLZRDDPF4R4DM3YTZXUGKM5U3BTXJ2QOGC",
     "usdcDistributor": "GDH4XHKJF23GQ3WL5GTQYVNEVVHIFIONDUIHZ7GRPGOC2TDOWFFLXZVY",
-    "deployer": "GCHMGWSGJS4CNBLWF2SBQVUGAF674RWCT5DFK5QENPVL6UCLAXQT2MVL"
+    "deployer": "GCHMGWSGJS4CNBLWF2SBQVUGAF674RWCT5DFK5QENPVL6UCLAXQT2MVL",
+    "admin": "GDJJRAMT722SAV4GO6XW53WP5BJDWIGZSJCXY26675M4WS3R22KSQJGE",
+    "executor": "GCCMYUP4MPVNGAH7OVJJCXUORXX2YZWBEITCUWJ4L2GE4GE4EEBXHSOY",
+    "treasury": "GDJJRAMT722SAV4GO6XW53WP5BJDWIGZSJCXY26675M4WS3R22KSQJGE"
   },
   "contracts": {
     "payableGate": {
-      "contractId": "CCF2BKQMKRHOJWUAZPKD72PLWVKHDED6TBOOF7ZJYUXH4OZAOCDLBGON",
-      "wasmHash": "0a45b3eb59992209c6d6cc69e499bbe66bc646355d5a07c3732c9817448a36e6",
-      "deployTx": "36e66d1dc225b47a0e68a3c7e58a3582cb6bd575851ef921b9049b004932dd2c",
-      "contractVersion": 2,
+      "contractId": "CDKC6UYM7JFZOIR3DSSHZWSNFB4NTYQ3X3AVJJ5MIU3UH6H4NBQON5GB",
+      "wasmHash": "28314459f6e83e34bf9cc5128d31b76d4a0a863f0ee17b1084a2ddc1c6d679eb",
+      "contractVersion": 3,
       "initialized": true,
-      "_comment": "Initialized with the capped vault model: Config.payer is this same contract id, so it transfers from its own funded balance with no human signature per payment. Verified end to end on testnet by scripts/testnet-settle.ts."
+      "initializeTx": "1a57e1f27423d488f2e8d710e680c99cdff0f86a4d7bd471cff6631a5792cfbf",
+      "fundingTx": "1988e0eef6651099999320b6b0f33c569294f6b98e30a6df1897b53d2b1b79eb",
+      "custody": "vault",
+      "caps": {
+        "maxPerPayable": "100000000000",
+        "windowSeconds": 86400,
+        "maxPerWindow": "500000000000"
+      },
+      "_comment": "Capped vault: Config.payer is this same contract id. v3 adds committed-balance tracking, withdraw to the fixed treasury, and issuer-signed revocation."
+    },
+    "payableGateV2": {
+      "contractId": "CCF2BKQMKRHOJWUAZPKD72PLWVKHDED6TBOOF7ZJYUXH4OZAOCDLBGON",
+      "_comment": "Superseded by v3. Kept because earlier functional-test transactions reference it. Its Config has no treasury field, so it cannot be upgraded in place."
     },
     "payableGateScaffold": {
       "contractId": "CB5GBGSEAHW3QWVZL25BQU672MHF7UBRAGD4PA3T5V57RQO7LMKJHA2N",
-      "wasmHash": "315055ee98b00a3d073fe88966862729f47efbe7ebc84e88017c47f36e8e2cbd",
-      "_comment": "HU-D1-01 toolchain scaffold, superseded by payableGate. Kept because the pinned registration_digest parity vector is bound to this contract id."
+      "_comment": "HU-D1-01 toolchain scaffold. The pinned registration/revocation digest parity vectors are bound to this contract id."
     }
   },
   "trustlines": {
@@ -57,5 +70,8 @@
     "registerPayable": "591cc660377f6b0e53a13917783f637c9fa012e2b61cbd25c19aa8be99152140",
     "settle": "c2001f73217090e30069f513eab8f7999428667a24de5caf26ab3f3ed370ddc4",
     "functionalCheck": "scripts/testnet-settle.ts: signed register, substituted-recipient rejected on-chain, exact-amount settle, double settle rejected, non-executor settle rejected."
+  },
+  "issuers": {
+    "pakta_issuer": "a5d05a32bb1950efacd757708e1ff71a647b6e6e0130f64e514c35d5703cf6a6"
   }
 }

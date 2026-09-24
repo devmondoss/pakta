@@ -3,9 +3,11 @@ extern crate std;
 mod admin;
 mod digest;
 mod register;
+mod revoke;
 mod settle;
+mod treasury;
 
-use crate::digest::{registration_digest, RegistrationFields};
+use crate::digest::{registration_digest, revocation_digest, RegistrationFields, RevocationFields};
 use crate::types::IssuerSignature;
 use crate::{PayableContract, PayableContractClient};
 use ed25519_dalek::{Signer, SigningKey};
@@ -17,6 +19,7 @@ pub const ONE_USDC: i128 = 10_000_000;
 pub const MAX_PER_PAYABLE: i128 = 100_000 * ONE_USDC;
 pub const MAX_PER_WINDOW: i128 = 250_000 * ONE_USDC;
 pub const WINDOW_SECONDS: u64 = 86_400;
+pub const VAULT_FUNDING: i128 = 1_000_000 * ONE_USDC;
 pub const START_TIME: u64 = 1_790_000_000;
 
 pub fn hex_nibble(c: u8) -> u8 {
@@ -49,6 +52,7 @@ pub struct Harness {
     pub admin: Address,
     pub executor: Address,
     pub payer: Address,
+    pub treasury: Address,
     pub asset: Address,
     pub recipient: Address,
     pub issuer_key: SigningKey,
@@ -78,6 +82,7 @@ impl Harness {
         let client = PayableContractClient::new(&env, &contract_id);
 
         let admin = Address::generate(&env);
+        let treasury = Address::generate(&env);
         let executor = Address::generate(&env);
         let recipient = Address::generate(&env);
 
@@ -89,7 +94,7 @@ impl Harness {
         } else {
             Address::generate(&env)
         };
-        StellarAssetClient::new(&env, &asset).mint(&payer, &(1_000_000 * ONE_USDC));
+        StellarAssetClient::new(&env, &asset).mint(&payer, &VAULT_FUNDING);
 
         let issuer_key = SigningKey::from_bytes(&[7u8; 32]);
         let issuer_pub = BytesN::from_array(&env, &issuer_key.verifying_key().to_bytes());
@@ -105,6 +110,7 @@ impl Harness {
             &network_id,
             &asset,
             &payer,
+            &treasury,
             &executor,
             &MAX_PER_PAYABLE,
             &WINDOW_SECONDS,
@@ -116,6 +122,7 @@ impl Harness {
             client,
             contract_id,
             admin,
+            treasury,
             executor,
             payer,
             asset,
@@ -128,6 +135,31 @@ impl Harness {
 
     pub fn vault() -> Self {
         Self::new(true)
+    }
+
+    /// A vault whose authorization is real rather than mocked, so that
+    /// `require_auth` actually has to be satisfied. Used by the tests that
+    /// assert an unauthorized caller is turned away.
+    pub fn strict_auth() -> Self {
+        let h = Self::new(true);
+        h.env.set_auths(&[]);
+        h
+    }
+
+    /// Signs a revocation for an already-registered payable, the way the
+    /// off-chain issuer would. A separate domain from registration, so a
+    /// registration signature cannot be replayed here.
+    pub fn sign_revocation(&self, proposal: &Proposal) -> Vec<IssuerSignature> {
+        let digest = revocation_digest(
+            &self.env,
+            &RevocationFields {
+                network_id: self.network_id.clone(),
+                contract_id: crate::address_bytes::address_to_bytes(&self.env, &self.contract_id),
+                payable_id_hash: proposal.payable_id.clone(),
+                proof_hash: proposal.proof_hash.clone(),
+            },
+        );
+        self.sign_digest(&digest, &self.issuer_key, &self.issuer_pub)
     }
 
     /// Everything needed to register one payable, so a test can vary exactly
@@ -214,5 +246,5 @@ pub struct Proposal {
 #[test]
 fn contract_version_is_exposed() {
     let harness = Harness::vault();
-    assert_eq!(harness.client.contract_version(), 2);
+    assert_eq!(harness.client.contract_version(), 3);
 }

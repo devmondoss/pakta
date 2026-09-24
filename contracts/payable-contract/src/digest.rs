@@ -75,3 +75,59 @@ pub fn registration_digest(env: &Env, fields: &RegistrationFields) -> BytesN<32>
         .sha256(&registration_preimage(env, fields))
         .into()
 }
+
+/// Revocation is authorized the same way registration is: by an issuer
+/// signature, not by an account.
+///
+/// The issuer is an Ed25519 verification key, not a Soroban account, so
+/// `issuer.require_auth()` is not available to it. Asking the admin to revoke
+/// instead would put the decision in the wrong hands — whether the evidence
+/// behind a proof went stale is the issuer's judgement, and only the issuer
+/// can attest to it.
+///
+/// A separate domain from `PAKTA_REG_V1` so that a registration signature can
+/// never be replayed as a revocation, and vice versa. `proof_hash` is included
+/// so a revocation is bound to the exact registration it cancels, not merely
+/// to the id.
+///
+/// ```text
+/// domain           13  ASCII "PAKTA_REV_V1" + 0x00
+/// network_id       32
+/// contract_id      32
+/// payable_id_hash  32
+/// proof_hash       32
+///                 ---
+///                 141
+/// ```
+pub const REVOKE_DOMAIN: [u8; 13] = *b"PAKTA_REV_V1\0";
+
+pub const REVOCATION_PREIMAGE_LEN: u32 = 141;
+
+pub struct RevocationFields {
+    pub network_id: BytesN<32>,
+    pub contract_id: BytesN<32>,
+    pub payable_id_hash: BytesN<32>,
+    pub proof_hash: BytesN<32>,
+}
+
+pub fn revocation_preimage(env: &Env, fields: &RevocationFields) -> Bytes {
+    let mut preimage = Bytes::new(env);
+
+    preimage.extend_from_array(&REVOKE_DOMAIN);
+    preimage.extend_from_array(&fields.network_id.to_array());
+    preimage.extend_from_array(&fields.contract_id.to_array());
+    preimage.extend_from_array(&fields.payable_id_hash.to_array());
+    preimage.extend_from_array(&fields.proof_hash.to_array());
+
+    if preimage.len() != REVOCATION_PREIMAGE_LEN {
+        panic!("revocation preimage length does not match the encoding table");
+    }
+
+    preimage
+}
+
+pub fn revocation_digest(env: &Env, fields: &RevocationFields) -> BytesN<32> {
+    env.crypto()
+        .sha256(&revocation_preimage(env, fields))
+        .into()
+}

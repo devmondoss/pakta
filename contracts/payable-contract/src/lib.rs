@@ -8,7 +8,7 @@ pub mod events;
 pub mod types;
 
 use address_bytes::address_to_bytes;
-use digest::{registration_digest, RegistrationFields};
+use digest::{registration_digest, revocation_digest, RegistrationFields, RevocationFields};
 use types::{Config, DataKey, Error, IssuerSignature, Payable, SpendWindow, Status};
 
 /// How long a payable entry is kept alive, and when a touch renews it.
@@ -60,7 +60,7 @@ pub struct PayableContract;
 #[contractimpl]
 impl PayableContract {
     pub fn contract_version() -> u32 {
-        2
+        3
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -72,6 +72,7 @@ impl PayableContract {
         network_id: BytesN<32>,
         asset: Address,
         payer: Address,
+        treasury: Address,
         executor: Address,
         max_per_payable: i128,
         window_seconds: u64,
@@ -98,6 +99,7 @@ impl PayableContract {
                 network_id,
                 asset,
                 payer,
+                treasury,
                 executor,
                 max_per_payable,
                 window_seconds,
@@ -150,6 +152,13 @@ impl PayableContract {
         if expiry <= env.ledger().timestamp() {
             return Err(Error::InvalidExpiry);
         }
+        // Refuse to authorize an obligation the vault cannot actually honour.
+        // Without this the gate would happily promise more than it holds and
+        // the shortfall would only surface at settle time, on whichever
+        // payable happened to run last.
+        if is_vault(&env, &config) && amount > available(&env, &config) {
+            return Err(Error::InsufficientAvailable);
+        }
 
         let fields = RegistrationFields {
             network_id: config.network_id.clone(),
@@ -181,6 +190,7 @@ impl PayableContract {
             },
         );
         bump_payable(&env, &payable_id);
+        commit(&env, amount);
 
         events::PayableRegistered {
             payable_id: payable_id.clone(),
@@ -227,6 +237,10 @@ impl PayableContract {
             .persistent()
             .set(&DataKey::Payable(payable_id.clone()), &payable);
         bump_payable(&env, &payable_id);
+        // The obligation is discharged, so it stops being committed. Note that
+        // this does not free anything up: the balance fell by the same amount,
+        // so `available` is unchanged. Only revoke and expire actually release.
+        release(&env, payable.amount);
 
         events::SettlementExecuted {
             payable_id,
@@ -238,9 +252,21 @@ impl PayableContract {
         Ok(())
     }
 
-    /// Closes out a payable whose proof has expired. Permissionless: letting
-    /// anyone clean up costs nothing and avoids stale entries waiting on an
-    /// operator who may never come.
+    /// Closes out a payable whose proof has expired, and releases the funds it
+    /// was holding.
+    ///
+    /// Permissionless by design, and that is a deliberate answer to a real
+    /// problem rather than a convenience: an expired payable keeps its amount
+    /// committed until somebody says so. A contract cannot notice time passing
+    /// on its own — it only runs when invoked — so if expiry required an
+    /// operator's authorization, a forgotten payable would hold the vault's
+    /// float hostage indefinitely. Letting anyone reclaim it means the
+    /// Settlement Agent, the indexer, or a vendor with an interest in the
+    /// vault staying solvent can all do the cleanup.
+    ///
+    /// The tradeoff, stated plainly: `available` is only accurate once expired
+    /// payables have actually been expired. Sweeping them is an operational
+    /// duty, not something the chain does by itself.
     pub fn expire(env: Env, payable_id: BytesN<32>) -> Result<(), Error> {
         let mut payable = load_payable(&env, &payable_id)?;
         if payable.status != Status::Ready {
@@ -255,6 +281,7 @@ impl PayableContract {
             .persistent()
             .set(&DataKey::Payable(payable_id.clone()), &payable);
         bump_payable(&env, &payable_id);
+        release(&env, payable.amount);
 
         events::PayableExpired {
             payable_id,
@@ -264,32 +291,53 @@ impl PayableContract {
         Ok(())
     }
 
-    /// Invalidates a payable before it settles.
+    /// Invalidates a payable before it settles, and releases what it held.
     ///
     /// Exists because the off-chain revalidation of §14.3 is not a barrier the
-    /// chain knows about: without this, evidence could go stale between
-    /// registration and settlement and the gate would still pay. Admin-gated
-    /// rather than issuer-signed, and worth being precise about what that
-    /// concedes: a compromised admin can *stop* a payment, never redirect one.
-    /// Revocation is one-way and cannot touch a settled payable.
+    /// chain knows about: without it, evidence could go stale between
+    /// registration and settlement and the gate would still pay.
+    ///
+    /// Authorized by an issuer signature, not by the admin. Whether the
+    /// evidence behind a proof still holds is the issuer's judgement, and an
+    /// Ed25519 verification key cannot `require_auth`, so the authorization
+    /// takes the same shape as registration: a signed digest the contract
+    /// recomputes. `PAKTA_REV_V1` keeps it from being interchangeable with a
+    /// registration signature, and `proof_hash` binds it to the exact
+    /// registration it cancels.
+    ///
+    /// One-way, and it cannot touch a settled payable. The worst a
+    /// compromised issuer key achieves here is refusing to pay — never
+    /// redirecting a payment.
     pub fn revoke_payable(
         env: Env,
         payable_id: BytesN<32>,
         reason_code: Symbol,
+        signatures: Vec<IssuerSignature>,
     ) -> Result<(), Error> {
         let config = load_config(&env)?;
-        config.admin.require_auth();
 
         let mut payable = load_payable(&env, &payable_id)?;
         if payable.status != Status::Ready {
             return Err(Error::NotReady);
         }
 
+        let digest = revocation_digest(
+            &env,
+            &RevocationFields {
+                network_id: config.network_id.clone(),
+                contract_id: address_to_bytes(&env, &env.current_contract_address()),
+                payable_id_hash: payable_id.clone(),
+                proof_hash: payable.proof_hash.clone(),
+            },
+        );
+        verify_issuer_signatures(&env, &config, &digest, &signatures)?;
+
         payable.status = Status::Revoked;
         env.storage()
             .persistent()
             .set(&DataKey::Payable(payable_id.clone()), &payable);
         bump_payable(&env, &payable_id);
+        release(&env, payable.amount);
 
         events::PayableRevoked {
             payable_id,
@@ -297,6 +345,49 @@ impl PayableContract {
         }
         .publish(&env);
         Ok(())
+    }
+
+    /// Returns uncommitted float from the vault to the treasury.
+    ///
+    /// Without this the float is trapped: money put into the vault could only
+    /// ever leave by paying a payable. The safety property is that it can
+    /// never touch money already promised — `available = balance - committed`
+    /// — and it can only ever send to the treasury address fixed at
+    /// `initialize`, so holding the admin key does not mean being able to
+    /// route funds anywhere.
+    pub fn withdraw(env: Env, amount: i128) -> Result<(), Error> {
+        let config = load_config(&env)?;
+        config.admin.require_auth();
+
+        if !is_vault(&env, &config) {
+            return Err(Error::NotAVault);
+        }
+        if amount <= 0 {
+            return Err(Error::AmountNotPositive);
+        }
+        if amount > available(&env, &config) {
+            return Err(Error::WithdrawExceedsAvailable);
+        }
+
+        token::Client::new(&env, &config.asset).transfer(&config.payer, &config.treasury, &amount);
+
+        events::VaultWithdrawn {
+            treasury: config.treasury,
+            amount,
+        }
+        .publish(&env);
+        Ok(())
+    }
+
+    /// Total amount promised to payables that are still `READY`.
+    pub fn get_committed(env: Env) -> i128 {
+        committed(&env)
+    }
+
+    /// What `withdraw` may actually move right now: balance minus commitments.
+    pub fn get_available(env: Env) -> Result<i128, Error> {
+        let config = load_config(&env)?;
+        Ok(available(&env, &config))
     }
 
     /// Relays an off-chain lifecycle fact to the ledger as an event. Emits
@@ -405,6 +496,47 @@ impl PayableContract {
         env.storage().instance().set(&DataKey::Config, &config);
         bump_instance(&env);
         Ok(())
+    }
+}
+
+/// True when the contract itself holds the float, which is the only case where
+/// commitments and withdrawals mean anything.
+fn is_vault(env: &Env, config: &Config) -> bool {
+    config.payer == env.current_contract_address()
+}
+
+fn committed(env: &Env) -> i128 {
+    env.storage()
+        .instance()
+        .get(&DataKey::Committed)
+        .unwrap_or(0)
+}
+
+fn set_committed(env: &Env, value: i128) {
+    env.storage().instance().set(&DataKey::Committed, &value);
+    bump_instance(env);
+}
+
+fn commit(env: &Env, amount: i128) {
+    set_committed(env, committed(env) + amount);
+}
+
+/// Saturating on purpose. The bookkeeping should never go negative, but if a
+/// future change ever let it, silently owing a negative commitment would make
+/// `available` larger than the vault actually holds — the one direction in
+/// which an arithmetic slip turns into real money leaving.
+fn release(env: &Env, amount: i128) {
+    let remaining = committed(env) - amount;
+    set_committed(env, if remaining > 0 { remaining } else { 0 });
+}
+
+fn available(env: &Env, config: &Config) -> i128 {
+    let balance = token::Client::new(env, &config.asset).balance(&config.payer);
+    let free = balance - committed(env);
+    if free > 0 {
+        free
+    } else {
+        0
     }
 }
 

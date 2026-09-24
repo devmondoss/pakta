@@ -77,6 +77,14 @@ pub struct Config {
     /// Both are the same code path. The decision is a deployment parameter,
     /// which is why it does not block building the gate.
     pub payer: Address,
+    /// The only destination `withdraw` can send to.
+    ///
+    /// Withdrawal has to exist or the float is trapped, but an admin-gated
+    /// "send anywhere" would hand whoever holds the admin key the whole vault.
+    /// Pinning the destination at `initialize` keeps the useful property: a
+    /// compromised admin can pull the float back to the treasury or halt the
+    /// gate, but cannot route a single unit to an address of their choosing.
+    pub treasury: Address,
     /// Who may call `settle`. Without this, anyone could trigger a payment and
     /// bypass the off-chain revalidation of §14.3.
     pub executor: Address,
@@ -90,6 +98,16 @@ pub struct Config {
 pub enum DataKey {
     Config,
     Window,
+    /// Sum of the amounts of every payable currently `READY`.
+    ///
+    /// The vault's balance alone says nothing about whether money can leave:
+    /// most of it may already be promised to obligations the gate has
+    /// authorized. `available = balance - committed` is the only figure
+    /// `withdraw` may touch.
+    ///
+    /// Maintained as a running total rather than derived, because deriving it
+    /// would mean iterating every payable, which a contract cannot do.
+    Committed,
     Payable(BytesN<32>),
 }
 
@@ -115,4 +133,11 @@ pub enum Error {
     InvalidExpiry = 16,
     InvalidLimits = 17,
     UnknownPhase = 18,
+    /// Registering this payable would commit more than the vault can cover.
+    InsufficientAvailable = 19,
+    /// `withdraw` asked for more than `balance - committed`.
+    WithdrawExceedsAvailable = 20,
+    /// `withdraw` only means something when the contract itself holds the
+    /// float. With an external treasury as payer there is nothing to withdraw.
+    NotAVault = 21,
 }

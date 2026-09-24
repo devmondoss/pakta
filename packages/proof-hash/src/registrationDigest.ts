@@ -198,3 +198,72 @@ export function registrationDigest(input: RegistrationInput): Uint8Array {
 export function registrationDigestHex(input: RegistrationInput): string {
   return Buffer.from(registrationDigest(input)).toString("hex");
 }
+
+/**
+ * The message an issuer signs to cancel a payable it already authorized.
+ *
+ * Revocation is authorized the same way registration is, because the issuer is
+ * an Ed25519 verification key rather than a Soroban account and so cannot
+ * `require_auth`. Whether the evidence behind a proof still holds is the
+ * issuer's judgement, not the admin's.
+ *
+ * A distinct domain separator is the point: without it the signature that
+ * authorized a payment would also authorize cancelling it. `proofHash` binds
+ * the revocation to the exact registration it cancels, so it cannot be moved
+ * to a different payable.
+ *
+ * ```text
+ * domain           13  ASCII "PAKTA_REV_V1" + 0x00
+ * network_id       32
+ * contract_id      32
+ * payable_id_hash  32
+ * proof_hash       32
+ *                 ---
+ *                 141
+ * ```
+ */
+export const REVOKE_DOMAIN_SEPARATOR = "PAKTA_REV_V1";
+export const REVOCATION_PREIMAGE_BYTES = 141;
+
+export type RevocationInput = {
+  networkPassphrase: string;
+  contractId: string;
+  payableId: string;
+  proofHash: string;
+};
+
+export function revocationPreimage(input: RevocationInput): Uint8Array {
+  const domain = new Uint8Array(13);
+  domain.set(new TextEncoder().encode(REVOKE_DOMAIN_SEPARATOR));
+
+  const parts: Uint8Array[] = [
+    domain,
+    sha256Bytes(requireNonEmptyString(input.networkPassphrase, "networkPassphrase")),
+    decodeContractId(requireNonEmptyString(input.contractId, "contractId")),
+    sha256Bytes(requireNonEmptyString(input.payableId, "payableId")),
+    hexToBytes(requireNonEmptyString(input.proofHash, "proofHash"), "proofHash"),
+  ];
+
+  const total = parts.reduce((sum, part) => sum + part.length, 0);
+  if (total !== REVOCATION_PREIMAGE_BYTES) {
+    throw new RegistrationDigestError(
+      `revocation preimage is ${total} bytes, expected ${REVOCATION_PREIMAGE_BYTES}`,
+    );
+  }
+
+  const preimage = new Uint8Array(total);
+  let offset = 0;
+  for (const part of parts) {
+    preimage.set(part, offset);
+    offset += part.length;
+  }
+  return preimage;
+}
+
+export function revocationDigest(input: RevocationInput): Uint8Array {
+  return sha256Bytes(revocationPreimage(input));
+}
+
+export function revocationDigestHex(input: RevocationInput): string {
+  return Buffer.from(revocationDigest(input)).toString("hex");
+}

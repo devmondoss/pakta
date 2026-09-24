@@ -205,3 +205,63 @@ fn address_to_bytes_matches_the_strkey_decoder() {
         )
     );
 }
+
+/// Same vector as `@pakta/proof-hash`'s revocation test. Separate domain from
+/// the registration digest, which is what stops a signature that authorized a
+/// payment from also authorizing its cancellation.
+#[test]
+fn revocation_digest_matches_the_typescript_vector() {
+    use crate::digest::{
+        revocation_digest, revocation_preimage, RevocationFields, REVOCATION_PREIMAGE_LEN,
+    };
+
+    let env = Env::default();
+    let fields = RevocationFields {
+        network_id: hex32(
+            &env,
+            "cee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
+        ),
+        contract_id: hex32(
+            &env,
+            "7a609a4401edb85ab95eba1853dfd30e5fd0310187c78373ed7bf8c1df5b1493",
+        ),
+        payable_id_hash: hex32(
+            &env,
+            "9ad58d1bb77a22e8944cbd6f92965ee2e987772a1389e856d567b69346206ca5",
+        ),
+        proof_hash: hex32(
+            &env,
+            "0218cfa6ab5a1bee3ae8827f94037542745abca1f1e69711c1961e37014043a4",
+        ),
+    };
+
+    assert_eq!(
+        revocation_preimage(&env, &fields).len(),
+        REVOCATION_PREIMAGE_LEN
+    );
+    assert_eq!(
+        revocation_digest(&env, &fields),
+        hex32(
+            &env,
+            "cf4f85ed03a7d850a9196a9f08433879d6af0b6e5e71155ae32427bb5e143f9e"
+        )
+    );
+}
+
+#[test]
+fn the_two_digests_never_collide() {
+    use crate::digest::{revocation_digest, RevocationFields};
+
+    let env = Env::default();
+    let registration = registration_digest(&env, &demo_fields(&env));
+    let revocation = revocation_digest(
+        &env,
+        &RevocationFields {
+            network_id: demo_fields(&env).network_id,
+            contract_id: demo_fields(&env).contract_id,
+            payable_id_hash: demo_fields(&env).payable_id_hash,
+            proof_hash: demo_fields(&env).proof_hash,
+        },
+    );
+    assert_ne!(registration, revocation);
+}

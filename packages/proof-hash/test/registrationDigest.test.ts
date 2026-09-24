@@ -2,11 +2,16 @@ import { describe, expect, it } from "vitest";
 import {
   DOMAIN_SEPARATOR,
   REGISTRATION_PREIMAGE_BYTES,
+  REVOCATION_PREIMAGE_BYTES,
+  REVOKE_DOMAIN_SEPARATOR,
   RegistrationDigestError,
   isoToUnixSeconds,
   registrationDigestHex,
   registrationPreimage,
+  revocationDigestHex,
+  revocationPreimage,
   type RegistrationInput,
+  type RevocationInput,
 } from "../src/registrationDigest.js";
 
 /**
@@ -160,5 +165,42 @@ describe("isoToUnixSeconds", () => {
 
   it("rejects a syntactically valid but impossible date", () => {
     expect(() => isoToUnixSeconds("2026-13-45T99:00:00Z")).toThrow(RegistrationDigestError);
+  });
+});
+
+describe("the revocation digest vector", () => {
+  const REVOCATION: RevocationInput = {
+    networkPassphrase: INPUT.networkPassphrase,
+    contractId: INPUT.contractId,
+    payableId: INPUT.payableId,
+    proofHash: INPUT.proofHash,
+  };
+
+  const EXPECTED_REVOCATION_DIGEST =
+    "cf4f85ed03a7d850a9196a9f08433879d6af0b6e5e71155ae32427bb5e143f9e";
+
+  it("builds a 141-byte preimage and hashes to the pinned digest", () => {
+    expect(revocationPreimage(REVOCATION)).toHaveLength(REVOCATION_PREIMAGE_BYTES);
+    expect(revocationDigestHex(REVOCATION)).toBe(EXPECTED_REVOCATION_DIGEST);
+  });
+
+  it("uses its own domain, so a registration signature cannot cancel a payment", () => {
+    const preimage = revocationPreimage(REVOCATION);
+    expect(Buffer.from(preimage.subarray(0, 12)).toString("ascii")).toBe(
+      REVOKE_DOMAIN_SEPARATOR,
+    );
+    expect(REVOKE_DOMAIN_SEPARATOR).not.toBe(DOMAIN_SEPARATOR);
+    expect(revocationDigestHex(REVOCATION)).not.toBe(EXPECTED_DIGEST);
+  });
+
+  it.each([
+    ["the network", { networkPassphrase: "Public Global Stellar Network ; September 2015" }],
+    ["the gate contract", { contractId: "CAMYM3CR6YM6Y3PUI7NMBJJ3SHWUKDFPRC4C722OOXZG3ZUUFW3ROF5P" }],
+    ["the payable id", { payableId: "PAY-2026-9183" }],
+    ["the proof hash", { proofHash: `${"0".repeat(63)}1` }],
+  ])("changing %s invalidates the revocation digest", (_label, override) => {
+    expect(revocationDigestHex({ ...REVOCATION, ...override })).not.toBe(
+      EXPECTED_REVOCATION_DIGEST,
+    );
   });
 });

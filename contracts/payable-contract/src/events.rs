@@ -83,3 +83,11 @@ pub struct PayableReconciled {
     pub payable_id: BytesN<32>,
     pub reason_code: Symbol,
 }
+
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VaultWithdrawn {
+    #[topic]
+    pub treasury: Address,
+    pub amount: i128,
+}

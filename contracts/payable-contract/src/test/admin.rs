@@ -14,6 +14,7 @@ fn initialize_cannot_run_twice() {
         &h.network_id,
         &h.asset,
         &h.payer,
+        &h.treasury,
         &h.executor,
         &(1_000 * ONE_USDC),
         &WINDOW_SECONDS,
