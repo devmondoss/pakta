@@ -9,14 +9,16 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "pnpm --filter './packages/*' exec tsc --noEmit",
-    "build:fixture": "tsx fixtures/demo-workbook/build-fixture.ts"
+    "typecheck": "pnpm --filter './packages/*' --filter './apps/*' exec tsc --noEmit",
+    "build:fixture": "tsx fixtures/demo-workbook/build-fixture.ts",
+    "build:pdf-fixtures": "tsx fixtures/demo-invoices/build-fixtures.ts"
   },
   "devDependencies": {
     "typescript": "7.0.2",
     "vitest": "5.0.1",
     "tsx": "4.23.15",
     "@types/node": "24.13.6",
-    "exceljs": "4.4.0"
+    "exceljs": "4.4.0",
+    "pdf-lib": "1.17.1"
   }
 }
