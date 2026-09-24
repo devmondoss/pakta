@@ -2,7 +2,7 @@
  * StrKey decoding — `G...` account ids and `C...` contract ids to their raw
  * 32 bytes.
  *
- * The `registration_digest` of `Pakta_Dia0_Dev1.md` §2 is defined over binary
+ * The `registration_digest` of `Pakta_Division_Trabajo.md` §7 is defined over binary
  * keys, not over their text form, precisely so that a signature cannot be
  * replayed by re-encoding the same key differently. That means something has
  * to do this decode, and it has to reject malformed input rather than produce

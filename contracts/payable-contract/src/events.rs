@@ -11,7 +11,7 @@ use soroban_sdk::{contractevent, Address, BytesN, Symbol};
 /// and `PayableRevoked` are facts the contract *enforced*. `PayableBlocked`,
 /// `ExceptionResolved` and `PayableReconciled` are testimonies relayed by the
 /// issuer through `attest_lifecycle` — the ledger records that the issuer said
-/// so, not that a rule was checked on-chain (`Pakta_Dia0_Dev1.md` §1).
+/// so, not that a rule was checked on-chain (`Pakta_Division_Trabajo.md` §4).
 
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]

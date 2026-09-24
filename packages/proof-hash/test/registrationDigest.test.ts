@@ -10,7 +10,7 @@ import {
 } from "../src/registrationDigest.js";
 
 /**
- * Parity vectors for the `registration_digest` of `Pakta_Dia0_Dev1.md` §2.
+ * Parity vectors for the `registration_digest` of `Pakta_Division_Trabajo.md` §7.
  * Every value below is a real testnet identifier from `deployments/testnet.json`,
  * so the Rust side can be pointed at the same manifest and must land on the
  * same 32 bytes.

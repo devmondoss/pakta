@@ -1,6 +1,6 @@
 /**
  * The one place a decimal money string becomes an on-chain integer, and back.
- * See `Pakta_Plan_Web3_Stellar.md` D4.
+ * See `Pakta_Division_Trabajo.md` §7.
  *
  * Stellar assets carry 7 decimals, so `"5000.00"` is `50_000_000_000` units.
  * Every rule here exists because the alternative is a wrong payment:

@@ -57,10 +57,12 @@ pub struct Harness {
 }
 
 impl Harness {
-    /// `payer_is_vault` picks the custody model (`Pakta_Plan_Web3_Stellar.md`
-    /// D1) without changing a line of contract code: true funds the contract
-    /// itself, false funds an external treasury account whose signature the
-    /// token transfer will then require.
+    /// `payer_is_vault` picks the custody model without changing a line of
+    /// contract code: true funds the contract itself, which is the capped
+    /// vault the team agreed on (`Pakta_Plan_Implementacion.md` §2.5); false
+    /// funds an external treasury account whose signature the token transfer
+    /// would then require. The second is kept covered so the escape hatch
+    /// stays a configuration change rather than a rewrite.
     pub fn new(payer_is_vault: bool) -> Self {
         let env = Env::default();
         // `mock_all_auths` alone is not enough for the external-treasury

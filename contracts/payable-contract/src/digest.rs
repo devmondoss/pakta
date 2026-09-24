@@ -1,6 +1,6 @@
 use soroban_sdk::{Bytes, BytesN, Env};
 
-/// The `registration_digest` of `Pakta_Dia0_Dev1.md` §2, recomputed on-chain.
+/// The `registration_digest` of `Pakta_Division_Trabajo.md` §7, recomputed on-chain.
 ///
 /// This is the whole point of the design: the contract never trusts a digest
 /// handed to it. It rebuilds the 261-byte preimage from its own typed

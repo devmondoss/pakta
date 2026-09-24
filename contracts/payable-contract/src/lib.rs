@@ -16,7 +16,7 @@ use types::{Config, DataKey, Error, IssuerSignature, Payable, SpendWindow, Statu
 /// This is not housekeeping — it is the anti-replay guarantee. A `payable_id`
 /// cannot be registered twice only for as long as its entry exists, so the
 /// entry must outlive the proof's expiry by a wide margin
-/// (`Pakta_Dia0_Dev1.md` §1). At roughly 5 seconds per ledger this is about
+/// (`Pakta_Division_Trabajo.md` §4). At roughly 5 seconds per ledger this is about
 /// thirty days of retention, renewed whenever the payable is touched with less
 /// than a day left.
 ///
@@ -116,7 +116,7 @@ impl PayableContract {
     /// digest from these typed arguments plus its own configuration and
     /// verifies the signatures against *that*, so a caller cannot substitute
     /// a recipient or an amount and have a valid proof still apply
-    /// (`Pakta_Dia0_Dev1.md` §2).
+    /// (`Pakta_Division_Trabajo.md` §7).
     #[allow(clippy::too_many_arguments)]
     pub fn register_payable(
         env: Env,

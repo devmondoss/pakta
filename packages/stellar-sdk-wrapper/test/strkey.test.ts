@@ -31,7 +31,7 @@ describe("decodeAccountId", () => {
   });
 
   it("rejects the placeholder wallets the original demo fixture shipped with", () => {
-    // These are the 24-character strings from Pakta_Dia0_Dev1.md §1 that could
+    // These are the 24-character strings from Pakta_Division_Trabajo.md §4 that could
     // never have settled. This test is what stops one coming back.
     for (const placeholder of [
       "GA1CD9F3KXQPLMN7R2WZT8VY",

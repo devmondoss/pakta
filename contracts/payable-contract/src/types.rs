@@ -4,7 +4,7 @@ use soroban_sdk::{contracterror, contracttype, Address, BytesN, Vec};
 /// machine of `Pakta_Arquitectura_Flujo.md` §8: `BLOCKED`, `RESOLUTION_PENDING`
 /// and `REVALIDATING` are kernel decisions, and mirroring them on-chain would
 /// cost a transaction each while adding nothing the contract enforces
-/// (`Pakta_Plan_Web3_Stellar.md` D2). They travel as events instead.
+/// (`Pakta_Plan_Implementacion.md` §2.5). They travel as events instead.
 #[contracttype]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Status {
@@ -32,7 +32,7 @@ pub struct Payable {
 /// One issuer's attestation. The public key travels with the signature so that
 /// the contract counts *distinct authorized issuers*, not just signature
 /// count — otherwise the same issuer could satisfy a threshold on its own
-/// (`Pakta_Dia0_Dev1.md` §1).
+/// (`Pakta_Division_Trabajo.md` §4).
 #[contracttype]
 #[derive(Clone)]
 pub struct IssuerSignature {
@@ -66,7 +66,7 @@ pub struct Config {
     /// The asset's Stellar Asset Contract.
     pub asset: Address,
     /// Where the money actually leaves from — the single knob that decides the
-    /// custody model (`Pakta_Plan_Web3_Stellar.md` D1):
+    /// custody model (`Pakta_Plan_Implementacion.md` §2.5):
     ///
     /// - set to this contract's own address: the vault model. The contract
     ///   transfers from its own funded balance, no human signature per payment.

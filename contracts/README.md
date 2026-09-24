@@ -39,7 +39,7 @@ firma, así que sustituir cualquier campo invalida el proof.
 ## El modelo de custodia es un parámetro, no una bifurcación
 
 `Config.payer` decide de dónde sale el dinero, y ambos modelos de
-`Pakta_Plan_Web3_Stellar.md` D1 son el mismo camino de código:
+`Pakta_Plan_Implementacion.md` §2.5 son el mismo camino de código:
 
 - **`payer` = la address del propio contrato** → modelo vault. El contrato transfiere
   de su saldo fondeado, sin firma humana por pago.

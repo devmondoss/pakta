@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
  * Proof-of-Payable Builder (Dev 2) and the Settlement Adapter (Dev 1) must
  * agree on byte-for-byte before anything gets signed.
  *
- * See `Pakta_Plan_Web3_Stellar.md` D3 and `Pakta_Dia0_Dev1.md` §2. This module
+ * See `Pakta_Division_Trabajo.md` §7 and `Pakta_Division_Trabajo.md` §7. This module
  * only covers `proof_hash = SHA-256(UTF-8(JCS(unsigned_proof)))`. The
  * `registration_digest` that the contract recalculates is a separate, binary
  * encoding and is deliberately NOT here — it depends on the contract id and
@@ -116,7 +116,7 @@ export function sha256Hex(input: string): string {
 /**
  * Fields that wrap a proof but are never part of what gets signed: the hash
  * itself, the signature, and the deployment metadata that only binds the
- * `registration_digest`. Shape proposed in `Pakta_Dia0_Dev1.md` §2 and still
+ * `registration_digest`. Shape proposed in `Pakta_Division_Trabajo.md` §7 and still
  * pending Dev 2's agreement — passed as data, not baked into the hash, so the
  * function survives the negotiation.
  */

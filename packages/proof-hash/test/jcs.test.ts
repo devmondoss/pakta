@@ -10,7 +10,7 @@ import {
 } from "../src/jcs.js";
 
 /**
- * Parity vectors for `Pakta_Plan_Web3_Stellar.md` D3. These are the values the
+ * Parity vectors for `Pakta_Division_Trabajo.md` §7. These are the values the
  * Rust side must reproduce byte-for-byte once `register_payable` exists — the
  * whole point of pinning them now is that a divergence surfaces here and not
  * in a failed settlement during the demo.

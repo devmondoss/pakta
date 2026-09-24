@@ -19,7 +19,7 @@ fn settle_moves_the_exact_amount_to_the_registered_recipient() {
 
 #[test]
 fn settle_works_identically_with_an_external_treasury_as_payer() {
-    // Custody model A rather than the vault (Pakta_Plan_Web3_Stellar.md D1).
+    // Custody model A rather than the vault (Pakta_Plan_Implementacion.md §2.5).
     // Same code path, different `Config.payer` — which is the point: the
     // decision is a deployment parameter, not a fork in the contract.
     let h = Harness::new(false);
@@ -77,7 +77,7 @@ fn settle_is_refused_while_paused() {
 
 #[test]
 fn a_revoked_payable_cannot_settle() {
-    // The on-chain brake for stale evidence (Pakta_Dia0_Dev1.md §1): without
+    // The on-chain brake for stale evidence (Pakta_Division_Trabajo.md §4): without
     // it, off-chain revalidation is advice the gate cannot enforce.
     let h = Harness::vault();
     let id = h.register(&h.proposal(6, 5_000 * ONE_USDC));
@@ -172,7 +172,7 @@ mod spend_window {
     fn the_aggregate_cap_stops_a_settlement_the_per_payable_cap_would_allow() {
         // MAX_PER_PAYABLE is 100k and MAX_PER_WINDOW is 250k, so three
         // individually-legal payables exceed the window. This is the gap
-        // Pakta_Dia0_Dev1.md §1 pointed out: a per-payable cap alone bounds
+        // Pakta_Division_Trabajo.md §4 pointed out: a per-payable cap alone bounds
         // nothing in aggregate.
         let h = Harness::vault();
         for (i, _) in (0..2).enumerate() {
@@ -210,7 +210,7 @@ mod spend_window {
 
     #[test]
     fn raising_the_cap_does_not_forgive_spend_already_recorded() {
-        // Explicitly required by Pakta_Dia0_Dev1.md §2: "actualizar límites no
+        // Explicitly required by Pakta_Division_Trabajo.md §7: "actualizar límites no
         // reinicia el gasto ya contabilizado en la ventana activa".
         let h = Harness::vault();
         let first = h.register(&h.proposal(50, 100_000 * ONE_USDC));

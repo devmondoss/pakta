@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { decodeAccountId, decodeContractId } from "@pakta/stellar-sdk-wrapper";
 
 /**
- * The `registration_digest` of `Pakta_Dia0_Dev1.md` §2 — the message the proof
+ * The `registration_digest` of `Pakta_Division_Trabajo.md` §7 — the message the proof
  * issuer actually signs, and the one the contract recalculates from its own
  * typed arguments before verifying that signature.
  *

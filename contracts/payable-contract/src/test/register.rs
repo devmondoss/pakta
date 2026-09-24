@@ -20,7 +20,7 @@ fn a_correctly_signed_payable_is_registered_as_ready() {
 
 #[test]
 fn the_same_payable_id_can_never_be_registered_twice() {
-    // Anti-replay. `payable_id` is the nonce (Pakta_Plan_Web3_Stellar.md §3),
+    // Anti-replay. `payable_id` is the nonce (Pakta_Division_Trabajo.md §7),
     // so a second registration fails even with a perfectly valid signature.
     let h = Harness::vault();
     let proposal = h.proposal(2, 5_000 * ONE_USDC);
@@ -198,7 +198,7 @@ fn an_empty_signature_set_does_not_meet_the_threshold() {
 fn the_same_issuer_cannot_satisfy_a_threshold_twice() {
     // Raise the threshold to 2 with a single authorized issuer, then try to
     // meet it by repeating that issuer. Counting signatures instead of
-    // distinct issuers is exactly the bug flagged in Pakta_Dia0_Dev1.md §1.
+    // distinct issuers is exactly the bug flagged in Pakta_Division_Trabajo.md §4.
     let h = Harness::vault();
     h.client
         .set_proof_issuers(&Vec::from_array(&h.env, [h.issuer_pub.clone()]), &1);
