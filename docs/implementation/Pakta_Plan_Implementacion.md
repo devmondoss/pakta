@@ -1,6 +1,6 @@
 # Pakta — Plan de Implementación
 
-**Versión:** 1.0
+**Versión:** 1.1 — vault con caps para el MVP
 **Fecha:** 23 de septiembre de 2026
 **Alcance:** stack técnico, arquitectura de infraestructura y plan de ejecución para pasar del mockup de frontend a un MVP funcional (Fase 1 del roadmap del Documento Maestro, sección 24) y su evolución hacia piloto (Fase 2).
 
@@ -83,11 +83,17 @@ Canonical Payable Model (sección 7.0) se implementa como el esquema Postgres ce
 | Componente | Elección | Motivo |
 |---|---|---|
 | Smart contracts | Soroban (Rust) | Definido en sección 19 del maestro: estado mínimo de Payable + invariantes |
-| SDK | `stellar-sdk` (JS/TS) + `soroban-client` | Integración desde el backend Node |
+| SDK | `stellar-sdk` (JS/TS) | Integración desde el backend Node |
 | Asset | USDC vía Stellar Asset Contract (SAC) | Settlement real en testnet |
 | Indexer de eventos | Stellar RPC (`getEvents`) consumido por un worker propio | Captura `payable_ready`, `settlement_executed`, `payable_reconciled` para reconciliation |
-| Auth on-chain | SEP-10 (y SEP-45 si se usa contract account) | Prueba de control de address, no de identidad legal del vendor (ver 8.6 del maestro) |
-| Custodia | Ninguna — la empresa mantiene sus keys o smart account | Cumple "Sovereignty of funds" (sección 12.1) |
+| Autorización | Firma Ed25519 del issuer sobre digest de registro y `executor.require_auth()` en `settle`; SEP-10 para autenticación fuera de cadena | SEP-10 prueba control de address, no identidad legal del vendor (ver 8.6 del maestro) |
+| Custodia | Vault Soroban prefondeado con float acotado; Treasury conserva sus claves, controla fondeo, pausa, límites y retiros | El contrato custodia el saldo depositado; caps por pago y ventana (sección 12.1) |
+
+**Money path del MVP.** `initialize` configura Treasury/admin, executor, issuer, SAC, `max_per_payable`, `max_per_window` y `window_seconds`. `register_payable` solo acepta proofs `READY`: recalcula el digest firmado que ata `proof_hash` a red, contrato, ID, recipient, SAC, amount, policy y expiry. Cualquiera puede enviar la transacción; solo una firma válida de issuer permitido la autoriza. El contrato retiene el ID único en storage persistente y renueva su TTL durante la vida declarada del vault. `settle(payable_id)` exige autorización del executor, comprueba estado, vencimiento, pausa, saldo y caps, y llama al SAC desde `env.current_contract_address()` hacia recipient guardado por amount guardado. No tiene argumentos de recipient ni amount. `revoke_payable` invalida un READY con autorización del issuer; `expire` es permissionless después del vencimiento. `attest_lifecycle` emite testimonios del issuer sobre excepciones y reconciliación, sin modificar el gate de dinero.
+
+**Administración y fondos.** Treasury fondea transfiriendo el asset al contrato. Solo Treasury puede cambiar límites, pausar o retirar hacia la dirección Treasury configurada. `withdraw` no acepta destination; como mínimo conserva saldo suficiente para todos los payables READY no revocados ni vencidos (`reserved_total` o suma equivalente probada) y rechaza saldo insuficiente. Cambiar límites no reinicia `spent_in_window`; la ventana se renueva solo al cruzar su límite temporal. La suma `spent_in_window + amount` se verifica sin overflow en el mismo cambio atómico que el pago. Registrar payables por encima del saldo disponible puede quedar permitido como obligación, pero el demo requiere fondeo suficiente antes de `settle`. El issuer comprometido sigue siendo un riesgo: los caps limitan cuantía, no prueban la verdad de documentos off-chain.
+
+**Integración y operaciones.** El proof se canonicaliza con JCS y SHA-256; TS y Rust comparten vectores fijos del digest de registro (ver `Pakta_Division_Trabajo.md` §7). USDC testnet será un asset de demo envuelto en SAC; las cuentas `G...` receptoras necesitan trustline. El indexer persiste cursor y eventos porque RPC no es archivo histórico permanente. El adapter revalida contra el kernel justo antes de `settle` y revoca un proof stale. Un intento rechazado localmente no produce transacción ni evento contractual. Una reemisión tras revocación necesita un ID nuevo y acuerdo de versión con Dev 2.
 
 ### 2.6 Infraestructura y DevOps
 
@@ -150,8 +156,9 @@ flowchart TB
 3. **Deterministic Control Kernel** — evalúa las reglas de la sección 7.3 del maestro (`invoice.vendor_id == po.vendor_id`, tolerancias, duplicados, wallet attestation, approvals, budget, expiry). Cada regla es una función pura testeable con unit tests.
 4. **Exception Service** — crea el objeto típico (`reason_code`, `owner_role`, `required_action`, `auto_revalidate`), enruta notificación (email/webhook) y expone el endpoint de resolución que dispara revalidación.
 5. **Proof-of-Payable Builder** — arma el objeto firmado/hasheado (sección 6.1) y lo persiste antes de invocar settlement.
-6. **Settlement Adapter** — decide el rail (SAC / x402 / MPP, sección 15) y llama al contrato Soroban.
-7. **Event Indexer Worker** — consume eventos on-chain y actualiza `settlements` + dispara reconciliation export.
+6. **Settlement Adapter** — valida proof y estado del kernel, decide el rail (SAC / x402 / MPP, sección 15) y llama al contrato Soroban.
+7. **Settlement Agent** — prioriza READY por vencimiento/riesgo, pide revalidación y ejecuta `settle(payable_id)` con backoff e idempotencia; las tools MCP exponen `list_ready_payables`, `explain_payable`, `settle_payable({payable_id})` y `get_settlement_proof`. Ninguna tool que mueve dinero acepta recipient ni amount.
+8. **Event Indexer Worker** — consume eventos on-chain y actualiza `settlements` + dispara reconciliation export.
 
 ---
 
@@ -166,7 +173,8 @@ pakta/
 │   ├── canonical-model/     # tipos TS compartidos: Payable, Exception, Proof, Settlement
 │   ├── rules-kernel/        # deterministic control kernel, testeable de forma aislada
 │   ├── ai-schemas/          # JSON Schemas / Zod para structured output de Claude
-│   └── stellar-sdk-wrapper/ # helpers sobre stellar-sdk/soroban-client
+│   ├── proof-hash/          # JCS, SHA-256 y vectores de paridad
+│   └── stellar-sdk-wrapper/ # helpers sobre stellar-sdk
 ├── contracts/
 │   └── payable-contract/    # Soroban / Rust
 ├── infra/
@@ -211,7 +219,7 @@ Este esquema es 1:1 con los JSON de ejemplo de las secciones 6.1, 6.2 y 6.3 del 
 **Semana 2 — AI + Exceptions + Contrato**
 - AI Extraction Service: parsing de invoice PDF/email con Claude structured output.
 - Exception Service con los 5-8 reason codes de la sección 10, notificación por email/webhook.
-- Contrato Soroban: estado mínimo (`Payable`), funciones `register_payable`, `submit_proof`, `block_payable`, `resolve_exception`, `revalidate`, `settle`, `expire`.
+- Contrato Soroban: `register_payable` con firma del issuer, `settle(payable_id)` con auth del executor, `revoke_payable`, `expire`, `attest_lifecycle` para auditoría y administración del vault. Registrar solo payables `READY`; el kernel conserva las transiciones de excepción fuera de cadena.
 - Deploy en testnet.
 
 **Semana 3 — Settlement + Reconciliation + Demo**
@@ -229,13 +237,12 @@ Este esquema es 1:1 con los JSON de ejemplo de las secciones 6.1, 6.2 y 6.3 del 
 - Policy builder configurable (YAML de la sección 18.4) expuesto en UI, no solo en config file.
 - Flujo de supplier portal / wallet verification (para resolver `VENDOR_WALLET_CHANGED` sin intervención manual del lado interno).
 - Migración de hosting backend a AWS (ECS Fargate) si el piloto lo justifica; mantener Vercel para frontend.
-- Revalidation at execution time (sección 14.3): chequeo final antes de `settle()`.
+- Migración opcional a contract account/SEP-45 para evitar custodia de fondos sin perder caps.
 
-### Fase 3 — Operación agentic (según roadmap, sección 24)
+### Fase 3 — Operación agentic ampliada (según roadmap, sección 24)
 
 - Multi-agent real vía Claude Agent SDK: Payables Agent, Vendor Verification Agent, Operations Agent, Approval Agent, Settlement Agent como procesos independientes con tool-boundaries.
-- Scheduled payable runs (cron) + priorización por riesgo/amount/due date.
-- MCP/A2A tools para que el sistema sea invocable por agentes externos del cliente.
+- Escalar los runs y herramientas MCP básicos del MVP a múltiples agentes y clientes; A2A y policies delegadas por organización.
 
 No se detalla infraestructura de Fase 4/5 (protocolo abierto, SAP/Oracle) aquí: depende de validación comercial (sección 23 del maestro) antes de comprometer diseño técnico.
 
@@ -243,9 +250,9 @@ No se detalla infraestructura de Fase 4/5 (protocolo abierto, SAP/Oracle) aquí:
 
 ## 7. Decisiones explícitas fuera de alcance del MVP
 
-Coherente con la sección 18.1 del maestro ("Fuera del MVP"):
+Límites del MVP, coherentes con la sección 18.1 del maestro:
 
-- Sin custodia de fondos — nunca se guardan private keys del treasury en el backend de Pakta.
+- Custodia acotada al saldo prefondeado del vault; las claves privadas de Treasury no se guardan en el backend de Pakta.
 - Sin GL/subledger completo — Pakta exporta reconciliation data, no reemplaza contabilidad.
 - Sin KYC/KYB de producción.
 - Sin privacidad avanzada (ZK, selective disclosure) — hashes simples como tamper-evident reference, como aclara la sección 13.2.
@@ -259,7 +266,7 @@ Coherente con la sección 18.1 del maestro ("Fuera del MVP"):
 |---|---|
 | AI extraction alucina un campo que el kernel trata como válido | AI nunca escribe a `payables` directo; pasa por `extraction_proposals` con confidence score y el kernel re-verifica contra fuentes deterministas (PO, receipt) antes de aceptar |
 | Ventana entre proof generado y settlement ejecutado | Revalidation check justo antes de `settle()` (sección 14.3), implementado desde Fase 1 aunque sea simple |
-| Replay de un proof ya usado | `nonce` en el contrato Soroban + unicidad de `payable_id` en Postgres |
+| Replay de un proof ya usado | `payable_id` único en storage persistente con TTL retenido/renovado durante la vida declarada del vault; unicidad también en Postgres |
 | Falla de posting a ERP después de settlement confirmado | `erp_posting_status` como campo explícito con reintentos vía BullMQ, nunca asumir que settlement = reconciliado |
 | Prompt injection desde el contenido de un invoice/email | El AI Extraction Service trata todo el contenido del documento como dato, nunca como instrucción; el schema de salida no incluye campos de control de flujo |
 

@@ -337,11 +337,11 @@ Corre el fixture canónico de 5 invoices y produce, de forma determinística, 1 
 
 ## 8. Diagrama de estados — ciclo de vida del `Payable`
 
-Coherente entre lo que corre en `@pakta/rules-kernel` (off-chain, ya construido) y lo que va a aplicar el contrato Soroban (on-chain, Dev 1).
+El tramo `VERIFYING/BLOCKED/RESOLUTION_PENDING` vive en `@pakta/rules-kernel` fuera de cadena. El contrato Soroban solo recibe un proof `READY` firmado; su estado propio es `READY/REVOKED/SETTLED/EXPIRED`.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> VERIFYING: ingestWorkbook() → register_payable()
+    [*] --> VERIFYING: ingestWorkbook() [kernel]
 
     VERIFYING --> READY: kernel — 0 exceptions
     VERIFYING --> BLOCKED: kernel — ≥1 exception
@@ -350,16 +350,20 @@ stateDiagram-v2
     RESOLUTION_PENDING --> READY: revalidate() — 0 exceptions
     RESOLUTION_PENDING --> BLOCKED: revalidate() — sigue fallando
 
-    READY --> SETTLED: settle() [Soroban, atómico]
+    READY --> REGISTERED_READY: register_payable() firmado [Soroban]
+    REGISTERED_READY --> SETTLED: settle(payable_id) [Soroban]
 
-    VERIFYING --> EXPIRED: expire()
-    BLOCKED --> EXPIRED: expire()
-    READY --> EXPIRED: expire()
+    VERIFYING --> EXPIRED: vencimiento [kernel]
+    BLOCKED --> EXPIRED: vencimiento [kernel]
+    READY --> EXPIRED: vencimiento [kernel, si no registrado]
+    REGISTERED_READY --> EXPIRED: expire() [Soroban]
+    REGISTERED_READY --> REVOKED: revoke_payable() [Soroban]
 
     SETTLED --> [*]
     EXPIRED --> [*]
+    REVOKED --> [*]
 
-    note right of READY
+    note right of REGISTERED_READY
         SETTLING no se persiste: Soroban
         es atómico, no hay estado
         intermedio observable entre
@@ -394,8 +398,8 @@ sequenceDiagram
     KER-->>OWN: INV-004 VENDOR_WALLET_CHANGED → Vendor Master
     KER-->>OWN: INV-005 MISSING_RECEIPT → Operations
 
-    PRF->>SET: ProofOfPayable(INV-001)
-    SET->>SET: settle()
+    PRF->>SET: ProofOfPayable firmado (INV-001)
+    SET->>SET: register_payable() → settle(payable_id)
     SET-->>REC: Settlement(tx_hash, ledger)
 
     OWN->>OWN: Vendor Master reverifica wallet (INV-004)
@@ -403,8 +407,8 @@ sequenceDiagram
     OWN->>KER: revalidate(INV-004), revalidate(INV-005)
     KER-->>PRF: INV-004 READY, INV-005 READY
 
-    PRF->>SET: ProofOfPayable × 2
-    SET->>SET: settle() × 2
+    PRF->>SET: ProofOfPayable firmado × 2
+    SET->>SET: register_payable() → settle(payable_id) × 2
     SET-->>REC: Settlement × 2
 
     REC-->>CFO: 3/5 settled (19,400) · 2 pendientes (9,000) · 0 no autorizados
@@ -414,4 +418,4 @@ sequenceDiagram
 
 ## 10. Próximo paso
 
-Dev 1 arranca `contracts/payable-contract` (Soroban): estado mínimo del `Payable`, los 7 entry points (`register_payable`, `submit_proof`, `block_payable`, `resolve_exception`, `revalidate`, `settle`, `expire`) y los invariantes de no-doble-settlement / no-sustitución de recipient-amount. Deploy de un esqueleto a testnet como primer hito verificable. En paralelo, Dev 2 conecta AI Extraction (LangGraph + Claude Agent SDK / Google ADK, con NVIDIA NIM como fallback de bajo costo) y arma el Exception Service real.
+Dev 1 construye `contracts/payable-contract` (Soroban): vault prefondeado con caps por payable y ventana, registro de proof firmado, revocación y `settle(payable_id)` autorizado sin parámetros de destinatario ni monto. `attest_lifecycle` solo emite testimonios del issuer para auditoría. El scaffold compila localmente; deploy e invocación en testnet siguen pendientes. En paralelo, Dev 2 conecta AI Extraction (LangGraph + Claude Agent SDK / Google ADK, con NVIDIA NIM como fallback de bajo costo) y arma el Exception Service real.

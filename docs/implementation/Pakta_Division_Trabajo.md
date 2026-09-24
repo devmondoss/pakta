@@ -1,6 +1,6 @@
 # Pakta — División de trabajo (2 devs)
 
-**Versión:** 3.0 — metodología Scrum aplicada
+**Versión:** 3.1 — Scrum y vault con caps para el MVP
 **Fecha:** 23 de septiembre de 2026
 **Referencia:** `Pakta_Documento_Maestro.md` (tesis de producto), `Pakta_Plan_Implementacion.md` (stack completo) y `Pakta_Arquitectura_Flujo.md` (diagramas y roadmap)
 
@@ -45,7 +45,7 @@ Cada **semana de Fase 1 = un Sprint**. Cada Sprint tiene un **Sprint Goal** y se
 La plataforma está terminada para el hackathon cuando **todo** lo siguiente es cierto a la vez, no una parte:
 
 - [ ] Las 8 reglas del kernel están implementadas y testeadas (Dev 2).
-- [ ] El contrato Soroban aplica los 4 invariantes de settlement y está desplegado en testnet (Dev 1).
+- [ ] El contrato Soroban verifica firma y binding del proof, ID único con TTL retenido, estado, expiry, revocación, autorización del executor, destinatario/monto/SAC fijos, no doble pago, pausa y caps por pago y ventana; transfiere de su balance y está desplegado en testnet (Dev 1).
 - [ ] AI Extraction Service convierte al menos PDF + email en `CanonicalPayable`, no solo el workbook (Dev 2).
 - [ ] Exception Service enruta y notifica de verdad (no solo produce el objeto `Exception`) (Dev 2).
 - [ ] Proof-of-Payable Builder entrega un `ProofOfPayable` real al Settlement Adapter, sin intervención manual (Dev 2 → Dev 1).
@@ -62,34 +62,38 @@ La plataforma está terminada para el hackathon cuando **todo** lo siguiente es 
 - [x] `packages/canonical-model` — tipos compartidos. **Contrato entre los dos, se edita en pareja.**
 - [ ] Esquema Postgres inicial — *no bloquea Fase 1, entra en Sprint 2 cuando haga falta persistencia real.*
 - [x] Acuerdo de que el mockup (Pakta Control Room) es la referencia visual de comportamiento esperado.
+- [x] Dev 1: scaffold de `contracts/payable-contract`, paquetes `proof-hash` y `stellar-sdk-wrapper`; compilan en local. Seis direcciones públicas reales de testnet en `fixtures/stellar-testnet-addresses.json` (cinco vendors y wallet alternativa de INV-004), con XLM de Friendbot; las claves siguen fuera de Git. `node --test scripts/verify-demo-addresses.test.mjs` comprueba formato, checksum y unicidad.
+- [ ] Dev 1 + Dev 2: cerrar juntos el schema firmado v1.1 de §7 y actualizar el fixture de Dev 2 sin perder el resultado 1 READY + 4 BLOCKED. Las trustlines del asset de demo siguen pendientes.
 
 ---
 
 ## 4. Dev 1 — Web3 / Settlement
 
-**Pregunta que responde:** *"Dado un Proof-of-Payable válido, ¿cómo se mueve el dinero en Stellar de forma verificable, sin custodia y sin poder pagarse dos veces?"*
+**Pregunta que responde:** *"Dado un Proof-of-Payable válido, ¿cómo se mueve el dinero desde un vault de float acotado en Stellar de forma verificable y sin poder pagarse dos veces?"*
 
-### Sprint 1 — Sprint Goal: *"Un contrato Soroban en testnet cuyo state machine y anti-replay están probados con tests, aunque todavía no mueva USDC real."*
+**Modelo MVP acordado por Dev 1:** Treasury fondea el contrato y fija `max_per_payable` y `max_per_window` para una ventana definida. El contrato custodia ese float y transfiere desde su propio balance. Treasury conserva sus claves; administra pausas, límites y retiros de saldo no comprometido. Una futura account contract (SEP-45) podría eliminar esta custodia. El issuer firma un digest que vincula `proof_hash` con red, contrato, payable, recipient, SAC, amount, policy y expiry. La firma verificada autoriza `register_payable()` aunque lo invoque cualquiera. `settle(payable_id)` exige `executor.require_auth()` y no acepta ni destinatario ni monto.
+
+### Sprint 1 — Sprint Goal: *"Un contrato Soroban en testnet cuyo registro firmado, anti-replay y límites del vault estén probados con tests."*
 
 | ID | Historia de usuario | Criterios de aceptación | Verificación (DoD) | Estado |
 |---|---|---|---|:---:|
 | HU-D1-01 | Como equipo, quiero un esqueleto de contrato desplegado en testnet, para validar el toolchain (Stellar CLI, `wasm32v1-none`) antes de invertir en lógica. | El contrato responde a `stellar contract invoke` real contra testnet. | `stellar contract deploy` exitoso + contract id documentado en README del paquete. | ⬜ |
-| HU-D1-02 | Como sistema, quiero el estado mínimo del `Payable` definido en storage persistente, para tener un modelo on-chain auditable. | `Payable { id, proof_hash, payer, recipient, asset, amount, policy_hash, expiry, status, nonce }` en storage `persistent`, no `temporary`. | Test que escribe y relee el struct. | ⬜ |
-| HU-D1-03 | Como org, quiero `register_payable()`, para dejar constancia on-chain de una obligación antes de tener su proof. | Rechaza `id` duplicado, `amount <= 0`, `expiry` pasado; requiere `payer.require_auth()`. | 4 tests unitarios (éxito + 3 rechazos). | ⬜ |
-| HU-D1-04 | Como proof issuer, quiero `submit_proof()`, para marcar un payable como `READY` cuando el kernel de Dev 2 ya lo verificó. | Solo transiciona desde `VERIFYING`; requiere `proof_issuer.require_auth()`; incrementa `nonce`. | 3 tests (transición válida, estado inválido, auth). | ⬜ |
-| HU-D1-05 | Como Vendor Master/Treasury, quiero `block_payable()` + `resolve_exception()`, para que el contrato refleje el ciclo de excepción-resolución, no solo éxito/fracaso. | `block_payable` legal desde `VERIFYING`/`READY`; `resolve_exception` legal solo desde `BLOCKED`; ambos incrementan `nonce`. | 4 tests (uno por transición + 1 de nonce). | ⬜ |
-| HU-D1-06 | Como proof issuer, quiero `revalidate()`, para reabrir la ventana de settlement con evidencia nueva, no con la vieja re-aprobada. | Exige `proof_hash`/`expiry` nuevos; legal solo desde `RESOLUTION_PENDING`; incrementa `nonce`. | 2 tests. | ⬜ |
-| HU-D1-07 | Como Treasury, quiero `settle()` a prueba de doble pago y de sustitución de destinatario. | (a) Solo si `status == READY`; (b) rechaza si expiró; (c) rechaza si el `nonce` no coincide; (d) **no recibe `recipient`/`amount` como parámetros** — solo usa lo ya guardado en `register_payable`; (e) transición atómica + evento. | 6 tests, uno por criterio + 1 de doble-settlement explícito. | ⬜ |
-| HU-D1-08 | Como sistema, quiero `expire()` permissionless, para que un payable vencido no quede colgado esperando que alguien lo cierre. | Legal desde cualquier estado no terminal si `now > expiry`; sin `require_auth()`. | 2 tests. | ⬜ |
+| HU-D1-02 | Como sistema, quiero estado on-chain mínimo y auditable. | `Config` guarda treasury/admin, executor, issuer, SAC, caps, ventana y pausa. `Payable` guarda ID único, `proof_hash`, recipient, amount, policy hash, expiry y estado `READY/REVOKED/SETTLED/EXPIRED`. Storage persistente con TTL renovado; sin `payer` ni `nonce` por payable. | Escribir/releer ambos; probar retención del ID durante la vida declarada del vault. | ⬜ |
+| HU-D1-03 | Como issuer, quiero registrar un proof `READY` firmado. | `register_payable()` recalcula el digest de argumentos tipados, verifica Ed25519 contra issuer permitido y rechaza ID usado, monto no positivo o sobre cap, expiry vencido y vault pausado. Puede invocarlo cualquiera. | Éxito; firma falsa/issuer ajeno/argumento alterado/duplicado/monto/expiry/pausa rechazados. | ⬜ |
+| HU-D1-04 | Como equipo, quiero paridad criptográfica TS↔Rust. | `proof_hash = SHA-256(JCS(unsigned_proof))`; digest de registro vincula red, contrato, ID, hash, recipient, SAC, amount, policy y expiry. No existe `submit_proof()` on-chain. | Vectores fijos JCS/hash/digest; cada mutación de argumento invalida la firma. | ⬜ |
+| HU-D1-05 | Como issuer, quiero auditoría del ciclo de vida y revocación efectiva. | `attest_lifecycle()` emite eventos autorizados sin modificar el gate; `revoke_payable()` cambia `READY → REVOKED` y evita el pago. | Fases enumeradas, auth del issuer, revocado no liquida, `SETTLED` no se revoca. | ⬜ |
+| HU-D1-06 | Como kernel, quiero revalidar excepciones antes de registrar un pago. | `BLOCKED → RESOLUTION_PENDING → READY` ocurre fuera de cadena. Solo se registra tras proof nuevo firmado; un ID revocado no se reabre. La reemisión con otro ID/versionado requiere diseño conjunto. | Demo registra INV-004/005 después de revalidación; ID revocado no se reutiliza. | ⬜ |
+| HU-D1-07 | Como Treasury, quiero liquidar sin doble pago ni sustitución de destino. | `settle(payable_id)` solo acepta ID, exige auth del executor, `READY`, no vencido, no revocado, vault activo, cap de ventana y saldo suficiente. Lee recipient, amount y SAC guardados; transfer y `SETTLED` son atómicos. | Tests por cada gate, segundo settle, saldos exactos y evento. | ⬜ |
+| HU-D1-08 | Como sistema, quiero `expire()` permissionless. | `now > expiry`, solo desde estado no terminal; conserva marcador anti-replay. | Pruebas antes/después del vencimiento y contra `SETTLED`. | ⬜ |
 
-**Sprint Review 1:** `cargo test --package payable-contract` en verde (≥21 tests, uno por criterio de arriba) + el contract id de testnet documentado y probado con una invocación real.
+**Sprint Review 1:** `cargo test --package payable-contract` en verde con cada criterio de seguridad probado + contract ID de testnet documentado y probado con invocación real. El scaffold de Día 0 no completa HU-D1-01 hasta ese deploy.
 
 ### Sprint 2 — Sprint Goal: *"El Settlement Adapter toma un `ProofOfPayable` real de Dev 2 y mueve USDC de verdad en testnet."*
 
 | ID | Historia de usuario | Criterios de aceptación | Verificación (DoD) | Estado |
 |---|---|---|---|:---:|
-| HU-D1-09 | Como Treasury, quiero que `settle()` ejecute un transfer real de USDC vía SAC, no solo cambiar el status. | `token::Client::transfer(payer, recipient, amount)` dentro del mismo call atómico. | Test contra un token SAC de prueba + invocación real en testnet. | ⬜ |
-| HU-D1-10 | Como sistema, quiero un Settlement Adapter que reciba un `ProofOfPayable` (contrato de datos, sección 7) y decida el rail (SAC por defecto). | Acepta el shape exacto del contrato de datos sin transformarlo. | **Integration checkpoint**: probado contra un `ProofOfPayable` producido por Dev 2, no un mock propio. | ⬜ |
+| HU-D1-09 | Como Treasury, quiero que `settle()` transfiera USDC vía SAC desde el vault. | `token::Client::transfer(env.current_contract_address(), recipient_guardado, amount_guardado)` en el mismo call atómico; destinatario `G...` con trustline del asset. Treasury puede retirar saldo no comprometido con auth y prueba. | Test con token/SAC: balances exactos, caps por pago/ventana y tx real en testnet. | ⬜ |
+| HU-D1-10 | Como sistema, quiero un Settlement Adapter que consuma el `ProofOfPayable` compartido y decida el rail. | Acepta el objeto de Dev 2 sin cambiar su significado; valida hash/red/contrato y codifica determinísticamente decimal→`i128`, fecha→Unix, direcciones→bytes. | Proof real de Dev 2; rechazar monto con >7 decimales, address inválida o hash distinto. | ⬜ |
 | HU-D1-11 | Como cuenta Stellar, quiero autenticarme vía SEP-10 antes de que el adapter opere en su nombre. | Challenge/response SEP-10 completo contra testnet. | Test de integración con el Anchor Platform de testnet. | ⬜ |
 
 **Sprint Review 2:** un `ProofOfPayable` insertado por Dev 2 se liquida en testnet sin que Dev 1 toque su forma — la prueba de que el contrato de datos aguanta.
@@ -99,8 +103,10 @@ La plataforma está terminada para el hackathon cuando **todo** lo siguiente es 
 | ID | Historia de usuario | Criterios de aceptación | Verificación (DoD) | Estado |
 |---|---|---|---|:---:|
 | HU-D1-12 | Como sistema, quiero un Event Indexer que consuma `getEvents` y escriba `Settlement`. | Captura `payable_ready`, `settlement_executed`, `payable_reconciled`. | Test contra un stream de eventos simulado + prueba real contra testnet. | ⬜ |
-| HU-D1-13 | Como Treasury, quiero revalidar justo antes de `settle()` que el proof no expiró y que amount/recipient no cambiaron (§14.3). | Un proof stale se rechaza aunque `status` siga en `READY`. | Test que fuerza un proof vencido y confirma el rechazo. | ⬜ |
+| HU-D1-13 | Como Treasury, quiero revalidar justo antes de `settle()` que el proof sigue vigente (§14.3). | Adapter consulta estado del kernel; si queda stale, issuer revoca on-chain antes de permitir otro pago. Auth del executor evita saltarse el adapter. El contrato también comprueba expiry y campos guardados. | Stale rechazado off-chain; invocación directa rechazada para ID revocado. | ⬜ |
 | HU-D1-14 | Como Accounting, quiero un export de reconciliación de vuelta a Excel/CSV. | Lee `settlements` + `payables`, no necesita saber cómo se generó el proof. | Test de exportación contra datos de settlement reales. | ⬜ |
+| HU-D1-15 | Como Treasury, quiero un Settlement Agent que ejecute payables válidos sin aprobación humana por pago. | Worker prioriza por vencimiento/riesgo, revalida en el kernel, invoca únicamente `settle(payable_id)`, reintenta con backoff y consulta estado on-chain antes de reintentar; nunca firma proofs. | Test de flujo READY/BLOCKED/stale, idempotencia y corrida testnet sin paso manual por payable. | ⬜ |
+| HU-D1-16 | Como integrador, quiero herramientas MCP de settlement con parámetros mínimos. | `list_ready_payables`, `explain_payable`, `settle_payable({payable_id})` y `get_settlement_proof`; ninguna herramienta que mueve dinero acepta recipient ni amount. | Schema rechaza esos campos; prompt adversarial no modifica un destinatario firmado; prueba de extremo a extremo. | ⬜ |
 
 **Sprint Review 3 / Demo:** las 5 invoices del demo script (§25) corren end-to-end — nivel 4, la Definition of Done de plataforma completa.
 
@@ -108,7 +114,7 @@ La plataforma está terminada para el hackathon cuando **todo** lo siguiente es 
 Parsing de documentos, prompts, extracción, reglas de negocio del kernel, UI del dashboard más allá de Settlement/Reconciliation.
 
 ### Riesgos
-- Replay de un proof ya usado → `nonce` en contrato + unicidad de `payable_id`.
+- Replay de un proof ya usado → marcador persistente de `payable_id` con TTL renovado; la auth del executor es un control distinto.
 - Ventana entre proof generado y settlement ejecutado → HU-D1-13.
 - Falla de posting a ERP después de settlement confirmado → `erp_posting_status` con reintentos.
 
@@ -177,8 +183,8 @@ El contrato Soroban, el SDK de Stellar, la ejecución de `settle()`, el indexer 
 |---|:---:|:---:|
 | Sprint 1 | ⬜ 0/8 historias | ✅ 10/10 historias |
 | Sprint 2 | ⬜ 0/3 historias | ⬜ 0/5 historias |
-| Sprint 3 | ⬜ 0/3 historias | ⬜ 0/4 historias |
-| **Total Fase 1** | **0/14** | **10/19** |
+| Sprint 3 | ⬜ 0/5 historias | ⬜ 0/4 historias |
+| **Total Fase 1** | **0/16** | **10/19** |
 
 ---
 
@@ -220,6 +226,14 @@ type Settlement = {
   erp_posting_status: "PENDING" | "RECONCILED" | "FAILED";
 };
 ```
+
+### Acuerdo de datos v1.1 para el vault (pendiente de edición conjunta del schema)
+
+Dev 2 añadirá `receipt_hash` a la evidencia y `proof_hash`, `issuer_public_key`, `issuer_signature`, `network_passphrase` y `contract_id` al proof firmado. Dev 1 añadirá `proof_hash` y `contract_id` a `Settlement`. `proof_hash` se representa como 64 hex minúsculos, `issuer_public_key` como StrKey `G...`, `issuer_signature` como base64 de 64 bytes Ed25519, `expires_at` como UTC sin fracciones y `amount` como decimal positivo con máximo siete decimales. El objeto anterior sigue describiendo el schema **implementado hoy**; ninguno debe afirmar que v1.1 ya está integrado. `payer` es configuración del vault. `payable_id` identifica una autorización de un solo uso; no hay `nonce` adicional. Las wallets del fixture deben reemplazarse por las direcciones públicas válidas de `fixtures/stellar-testnet-addresses.json` en el dominio de Dev 2.
+
+El payload sin firma incluye exactamente los campos actuales de `ProofOfPayable` más `receipt_hash`. `proof_hash = SHA-256(UTF-8(JCS(unsigned_proof)))` conforme a RFC 8785; excluye hash, firma y metadata de despliegue. El adapter lo recalcula y rechaza diferencias. Para el contrato, la firma Ed25519 cubre `SHA-256(domain || network_id || contract_id || payable_id_hash || proof_hash || recipient || asset_contract_id || amount || policy_hash || expiry)`. `domain` es ASCII `PAKTA_REG_V1` + byte `00`; `network_id` es SHA-256 de la passphrase UTF-8; cada ID/address/hash binario ocupa 32 bytes; `amount` es `i128` positivo big endian en unidades de 10⁻⁷; `expiry` es `u64` big endian en segundos Unix. `payable_id_hash` es SHA-256 del ID UTF-8; `policy_hash` es SHA-256 de `policy_version` UTF-8. El contrato recalcula este digest desde los argumentos tipados y su red/configuración antes de verificar la firma. El issuer de MVP es único; la rotación de issuer requiere auth de admin. Vectores fijos TS↔Rust deben cubrir cambio de red, contrato, ID, recipient, SAC, monto, policy y expiry.
+
+La retención del marcador de ID tiene una vida declarada y mantenimiento de TTL; caducar ese storage permitiría registrar otra vez el mismo ID. `executor.require_auth()` protege el acceso a `settle`, mientras la unicidad de ID evita replay. En el demo, un invoice bloqueado se registra **después** de revalidación; un proof registrado y revocado no se reabre con el mismo ID. Reemisión con ID/versionado nuevo se diseña entre ambos devs.
 
 Regla de oro: **Dev 1 nunca lee `extraction_proposals` ni las reglas del kernel. Dev 2 nunca escribe en `settlements` ni llama al contrato.** Si alguno necesita algo del lado del otro, se agrega al contrato de arriba — no se hace un atajo directo a la tabla o servicio interno del otro dominio.
 

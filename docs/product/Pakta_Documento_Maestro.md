@@ -57,7 +57,7 @@ Excel / CSV / PDF / Email / Accounting App
 
 **Pakta es:** adaptive ingestion + AI orchestration + deterministic controls + exception resolution + verifiable settlement + reconciliation bridge.
 
-**Pakta no es:** otro ERP, un LLM con acceso libre al treasury, un custodio, un replacement de x402/MPP, un nuevo accounting ledger completo ni un requisito para guardar documentos empresariales on-chain.
+**Pakta no es:** otro ERP, un LLM con acceso libre al treasury, un custodio de claves privadas, un replacement de x402/MPP, un nuevo accounting ledger completo ni un requisito para guardar documentos empresariales on-chain.
 
 ### 1.4 Índice del documento maestro
 
@@ -382,6 +382,8 @@ Ejemplo conceptual:
 }
 ```
 
+Para el vault del MVP, este payload se canonicaliza con JCS y se calcula `proof_hash = SHA-256(JCS(payload))`. El envoltorio firmado añade `proof_hash`, `issuer_public_key`, `issuer_signature`, `network_passphrase` y `contract_id`; la firma cubre un digest de registro que también vincula recipient, SAC, monto, policy, vencimiento e ID del payable. El schema compartido implementado aún está en v1.0; la edición v1.1 se coordina entre Dev 1 y Dev 2 según `Pakta_Division_Trabajo.md` §7.
+
 ### 6.2 Exception Orchestration
 
 Si una regla falla, Pakta produce un objeto accionable y machine-readable.
@@ -556,17 +558,16 @@ VERIFYING
 Alternativos: REJECTED / EXPIRED / CANCELLED
 ```
 
-Funciones conceptuales:
+Funciones conceptuales del MVP; `resolve_exception` y `revalidate` siguen en el kernel fuera de cadena:
 
 ```text
-register_payable()
-submit_proof()
-approve_payable()
-block_payable()
-resolve_exception()
-revalidate()
-settle()
+initialize()
+register_payable()        // proof READY firmado por issuer
+revoke_payable()          // invalida un proof registrado
+settle(payable_id)        // auth del executor; mueve saldo del vault
 expire()
+attest_lifecycle()        // eventos; no cambia el gate de pago
+set_limits() / set_paused() / withdraw()  // admin de Treasury
 ```
 
 El contract no necesita guardar todos los documentos. Debe almacenar solo el estado y commitments esenciales.
@@ -587,7 +588,7 @@ La autorización permite expresar qué addresses pueden ejecutar operaciones. Pa
 
 ### 8.4 Contract Accounts y Sovereign Control
 
-Una organización puede utilizar una contract account/smart account con políticas propias. Pakta no necesita custodiar las keys del treasury. La empresa conserva la autoridad y el contract solamente permite settlement bajo condiciones verificadas.
+En el MVP, Treasury conserva sus claves pero prefondea un vault Soroban: el contrato **custodia el saldo depositado** y paga desde su balance, con caps por payable y ventana. Treasury administra límites, pausa y retiros. Una contract account/smart account con políticas propias (SEP-45) es una evolución posterior para evitar esta custodia.
 
 ### 8.5 Contract Events
 
@@ -764,7 +765,7 @@ El pitch cambia de “adopta blockchain” a:
 
 ### 12.1 Sovereignty of funds
 
-Pakta no necesita custodiar fondos. Treasury conserva sus keys o utiliza una smart account controlada por la organización. El contract gate limita cuándo puede ejecutarse un transfer.
+En el MVP Treasury conserva sus keys y decide cuánto saldo depositar en un vault Soroban. El contrato custodia ese float acotado, aplica límites por payable y por ventana y solo transfiere tras firma válida del issuer y autorización del executor. Treasury puede pausar y retirar saldo no comprometido mediante funciones autorizadas. El sistema no es todavía una arquitectura sin custodia de fondos; esa es la ruta futura con contract account.
 
 ### 12.2 Sovereignty of policy
 
@@ -867,7 +868,7 @@ No son necesarias para probar el MVP.
 - signed evidence/attestations donde aplique;
 - separation of duties;
 - proof expiry;
-- nonce/idempotency/replay protection;
+- `payable_id` único con marcador anti-replay retenido; idempotencia de settlement;
 - recipient binding;
 - deterministic checks;
 - role-based authorization;
@@ -877,7 +878,7 @@ No son necesarias para probar el MVP.
 
 ### 14.3 Revalidation at execution time
 
-Una idea importante para una versión robusta: `READY` no debe ser eterno. Antes del `settle()`, el contract/backend puede comprobar que:
+`READY` no debe ser eterno. Antes de `settle()`, el adapter comprueba el estado del kernel y el contrato aplica sus propios gates. Si un proof registrado queda obsoleto, el issuer lo revoca on-chain antes de otro intento. Se comprueba que:
 
 - proof no expiró;
 - amount/recipient no cambió;
@@ -1173,15 +1174,15 @@ El objetivo es que una empresa pueda personalizar su control sin contratar un im
 Payable {
     id,
     proof_hash,
-    payer,
     recipient,
-    asset,
     amount,
     policy_hash,
     expiry,
-    status,
-    nonce
+    status  // READY | REVOKED | SETTLED | EXPIRED
 }
+Config { treasury, admin, executor, issuer, asset_sac,
+         max_per_payable, max_per_window, window_seconds,
+         spent_in_window, paused }
 ```
 
 ### 19.2 Contract invariants
@@ -1190,11 +1191,14 @@ Payable {
 - proof not expired;
 - exact recipient binding;
 - exact amount/asset binding;
-- nonce not consumed;
-- caller/authorization valid;
+- `payable_id` único y marcador anti-replay retenido durante la vida del vault;
+- firma Ed25519 del issuer sobre digest que vincula proof hash, red, contrato, ID, recipient, SAC, amount, policy y expiry;
+- `executor.require_auth()`; vault no pausado, saldo y caps por pago/ventana suficientes;
 - state moves atomically to SETTLED;
 - emits settlement event;
 - same payable cannot settle twice.
+
+`register_payable` puede ser invocado por cualquiera porque verifica la firma del issuer. `settle` solo recibe `payable_id`; lee recipient, amount y SAC guardados y ejecuta `token::Client::transfer` desde la dirección del contrato. El contrato no verifica la verdad de los documentos off-chain: confía en el issuer; los caps limitan la exposición de un issuer comprometido.
 
 ### 19.3 Off-chain proof issuer trust
 
@@ -1314,7 +1318,7 @@ Si el MVP guarda invoices on-chain o recrea un procurement workflow completo, es
 
 ### 22.3 “Un backend normal puede hacer esto”
 
-Sí. Un backend centralizado puede implementar muchos controles. Stellar aporta utilidad si las partes quieren un settlement verificable, programmable authorization, shared event history y stablecoin execution sin delegar custodia a Pakta. La demo debe enseñar ese valor, no asumirlo.
+Sí. Un backend centralizado puede implementar muchos controles. Stellar aporta utilidad si las partes quieren un settlement verificable, programmable authorization, shared event history y stablecoin execution. En el MVP, el contrato vault custodia el float prefondeado, con caps visibles on-chain; Pakta no posee las claves privadas de Treasury. La demo debe enseñar ese valor y ese límite con claridad.
 
 ### 22.4 “Proof issuer es una autoridad central”
 

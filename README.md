@@ -79,7 +79,7 @@ Invoice, PO, receipt, monto, presupuesto y firma del agente pueden estar perfect
 | **Blockchain** | Soroban (Rust) · Stellar SDK · USDC vía Stellar Asset Contract (SAC) · SEP-10/SEP-45 |
 | **Infra** | Vercel · Fly.io/Railway → AWS ECS · GitHub Actions · Sentry |
 
-Pakta **no custodia fondos**: la empresa conserva sus keys o smart account; el contrato solo autoriza el `transfer` cuando el payable está verificado.
+En el MVP, Treasury conserva sus claves y prefondea un **vault Soroban con custodia acotada del float**. Treasury fija límites por payable y por ventana; el contrato transfiere de su propio saldo solo a destinatarios y montos vinculados al proof firmado. Una contract account sin custodia queda como evolución posterior.
 
 ---
 
@@ -87,7 +87,7 @@ Pakta **no custodia fondos**: la empresa conserva sus keys o smart account; el c
 
 **Pakta es:** ingestion adaptativa + orquestación con AI + controles determinísticos + resolución de excepciones + settlement verificable + puente de reconciliación.
 
-**Pakta no es:** otro ERP, un LLM con acceso libre al treasury, un custodio, un reemplazo de x402/MPP, un ledger contable completo, ni un requisito de guardar documentos empresariales on-chain.
+**Pakta no es:** otro ERP, un LLM con acceso libre al treasury, un custodio de claves privadas, un reemplazo de x402/MPP, un ledger contable completo, ni un requisito de guardar documentos empresariales on-chain.
 
 ---
 
