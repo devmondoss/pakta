@@ -47,7 +47,15 @@ importers:
         specifier: 24.13.6
         version: 24.13.6
 
-  packages/proof-hash: {}
+  packages/proof-hash:
+    dependencies:
+      '@pakta/stellar-sdk-wrapper':
+        specifier: workspace:*
+        version: link:../stellar-sdk-wrapper
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.6
+        version: 24.13.6
 
   packages/rules-kernel:
     dependencies:
