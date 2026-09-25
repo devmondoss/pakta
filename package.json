@@ -14,13 +14,15 @@
     "contract:test": "cargo test --manifest-path contracts/Cargo.toml --workspace",
     "contract:build": "stellar contract build --manifest-path contracts/payable-contract/Cargo.toml",
     "contract:fmt": "cargo fmt --manifest-path contracts/Cargo.toml --all -- --check",
-    "testnet:settle": "tsx scripts/testnet-settle.ts"
+    "testnet:settle": "tsx scripts/testnet-settle.ts",
+    "build:pdf-fixtures": "tsx fixtures/demo-invoices/build-fixtures.ts"
   },
   "devDependencies": {
     "typescript": "7.0.2",
     "vitest": "5.0.1",
     "tsx": "4.23.15",
     "@types/node": "24.13.6",
-    "exceljs": "4.4.0"
+    "exceljs": "4.4.0",
+    "pdf-lib": "1.17.1"
   }
 }

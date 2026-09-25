@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  --background: #0a0e1a;
+  --surface: #121729;
+  --surface-2: #1a2038;
+  --foreground: #e8eaf2;
+  --muted: #8891ac;
+  --border: #ffffff14;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 32px rgba(0, 0, 0, 0.35);
+  --accent: #8b6bff;
+  --accent-foreground: #ffffff;
+  --ready: #3ddc97;
+  --ready-bg: #3ddc971f;
+  --blocked: #ff6b6b;
+  --blocked-bg: #ff6b6b1f;
+  --settled: #35c6ec;
+  --settled-bg: #35c6ec1f;
+  --live: #ffc857;
+  --live-bg: #ffc8571f;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-ready: var(--ready);
+  --color-ready-bg: var(--ready-bg);
+  --color-blocked: var(--blocked);
+  --color-blocked-bg: var(--blocked-bg);
+  --color-settled: var(--settled);
+  --color-settled-bg: var(--settled-bg);
+  --color-live: var(--live);
+  --color-live-bg: var(--live-bg);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  background-image:
+    radial-gradient(60rem 30rem at 15% -10%, #8b6bff14, transparent),
+    radial-gradient(50rem 26rem at 110% 10%, #35c6ec12, transparent);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+@keyframes pulse-live {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.animate-pulse-live {
+  animation: pulse-live 1.6s ease-in-out infinite;
+}
