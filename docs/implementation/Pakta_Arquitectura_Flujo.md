@@ -1,12 +1,27 @@
 # Pakta — Esquema y Flujo Técnico
 
 **Checkpoint intermedio — hackathon**
-**Fecha:** 23 de septiembre de 2026
-**Repositorio:** https://github.com/devmondoss/pakta
+**Fecha:** 23 de septiembre de 2026 · última actualización 24 de septiembre de 2026
+**Repositorio:** [https://github.com/devmondoss/pakta](https://github.com/devmondoss/pakta)
 
-> Qué problema resolvemos, cómo se resuelve hoy sin Pakta, cómo lo resuelve Pakta, la arquitectura completa (frontend, backend, datos, agentic/AI, blockchain, infra), el diagrama de procesos, el diagrama de datos, el diagrama de construcción (roadmap) y qué está construido hasta este checkpoint. Documentación completa: [`product/Pakta_Documento_Maestro.md`](../product/Pakta_Documento_Maestro.md) · [`implementation/Pakta_Plan_Implementacion.md`](Pakta_Plan_Implementacion.md) · [`implementation/Pakta_Division_Trabajo.md`](Pakta_Division_Trabajo.md).
+> Qué problema resolvemos, cómo se resuelve hoy sin Pakta, cómo lo resuelve Pakta, la arquitectura completa (frontend, backend, datos, agentic/AI, blockchain, infra), el diagrama de procesos, el diagrama de datos, el diagrama de construcción (roadmap), el diagrama de casos de uso y qué está construido hasta este checkpoint.
+
+### Este documento es el hub
+
+Todo lo demás en `docs/` es un **complemento** de este archivo, no un documento aparte que vive por su cuenta — la idea es que cualquier duda técnica se resuelva primero acá, y solo se baje al complemento correspondiente cuando haga falta el detalle fino:
+
+
+| Complemento                                                                   | Para qué bajar ahí                                                                                                        |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `[product/Pakta_Documento_Maestro.md](../product/Pakta_Documento_Maestro.md)` | La tesis de producto completa, el modelo de datos §6-7 con ejemplos JSON, el modelo de exceptions §10, el demo script §25 |
+| `[Pakta_Plan_Implementacion.md](Pakta_Plan_Implementacion.md)`                | El plan de ejecución por fases con el detalle semana a semana (este doc solo tiene el roadmap resumido en Gantt, §6)      |
+| `[Pakta_Division_Trabajo.md](Pakta_Division_Trabajo.md)`                      | Historias de usuario con criterios de aceptación y DoD por comando, para ambos devs                                       |
+| `[Pakta_Dev2_Checklist.md](Pakta_Dev2_Checklist.md)`                          | Lo mismo que el anterior pero recortado solo a la parte de Dev 2, con el estado real actualizado historia por historia    |
+
 
 ---
+
+
 
 ## 0. Track del hackathon
 
@@ -17,6 +32,8 @@
 Pakta encaja directo: el agente es quien decide **qué** pagar, pero el pago mismo solo se ejecuta cuando el Deterministic Control Kernel confirma que la obligación cumple las reglas que la empresa definió — la autonomía del agente vive **dentro** de esas reglas, nunca por fuera de ellas.
 
 ---
+
+
 
 ## 1. El problema
 
@@ -41,9 +58,13 @@ flowchart LR
     class A1,B1,C1,D1,E1,G1,I1,J1 pain
 ```
 
+
+
 **El costo real:** 63% de equipos de AP dedica más de 10 horas/semana a procesar invoices, 66% todavía hace entrada manual al ERP (IFOL, 2025), y 79% de organizaciones sufrió intentos de fraude de pagos en 2024 (AFP, 2025) — buena parte por cambios de cuenta/wallet del proveedor no verificados.
 
 ---
+
+
 
 ## 2. La solución — Pakta
 
@@ -71,9 +92,13 @@ flowchart LR
     class ING,AI,CPM,KER,EXC,PRF,SET,SC,STL,IDX,REC good
 ```
 
+
+
 > **La diferencia:** el payment rail responde "¿podemos mover el dinero?". Pakta responde **"¿esta obligación específica está realmente lista para pagarse, a este destinatario, por este monto, ahora?"** — antes de que el dinero se mueva, no después.
 
 ---
+
+
 
 ## 3. Arquitectura del sistema
 
@@ -81,58 +106,83 @@ Stack real, sin nada especulativo que no vayamos a usar en el hackathon: nada de
 
 ### Frontend
 
-| Componente | Elección |
-|---|---|
-| Framework | Next.js (App Router) + React + TypeScript |
-| UI | Tailwind + shadcn/ui — ya prototipado en el mockup del Control Room |
-| Estado / datos | TanStack Query contra la API del backend |
-| Auth | **Ninguna por ahora.** No la necesita el demo del hackathon; se evalúa si el piloto real la requiere |
+
+| Componente     | Elección                                                                                             |
+| -------------- | ---------------------------------------------------------------------------------------------------- |
+| Framework      | Next.js (App Router) + React + TypeScript                                                            |
+| UI             | Tailwind + shadcn/ui — ya prototipado en el mockup del Control Room                                  |
+| Estado / datos | TanStack Query contra la API del backend                                                             |
+| Auth           | **Ninguna por ahora.** No la necesita el demo del hackathon; se evalúa si el piloto real la requiere |
+
+
+
 
 ### Backend
 
-| Componente | Elección |
-|---|---|
-| Runtime | Node.js 24 + TypeScript |
-| API HTTP | Fastify — se conecta cuando el dashboard necesite datos reales; hoy el kernel corre como librería pura (`pnpm test`), sin servidor |
-| Colas / jobs | **Ninguna por ahora.** No hay nada asíncrono en el flujo actual que lo justifique |
-| Validación | Zod en cada frontera de confianza (spreadsheet, salida de IA, requests) |
+
+| Componente   | Elección                                                                                                                           |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Runtime      | Node.js 24 + TypeScript                                                                                                            |
+| API HTTP     | Fastify — se conecta cuando el dashboard necesite datos reales; hoy el kernel corre como librería pura (`pnpm test`), sin servidor |
+| Colas / jobs | **Ninguna por ahora.** No hay nada asíncrono en el flujo actual que lo justifique                                                  |
+| Validación   | Zod en cada frontera de confianza (spreadsheet, salida de IA, requests)                                                            |
+
+
+
 
 ### Datos
 
-| Componente | Elección |
-|---|---|
-| Base de datos | PostgreSQL vía Supabase |
-| Vector search | pgvector (ya incluido en Supabase) — **solo si** el matching difuso invoice↔PO en AI Extraction lo requiere; no se activa antes de necesitarlo |
-| Storage de documentos | Supabase Storage (PDFs/evidencia original, off-chain) |
+
+| Componente            | Elección                                                                                                                                       |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Base de datos         | PostgreSQL vía Supabase                                                                                                                        |
+| Vector search         | pgvector (ya incluido en Supabase) — **solo si** el matching difuso invoice↔PO en AI Extraction lo requiere; no se activa antes de necesitarlo |
+| Storage de documentos | Supabase Storage (PDFs/evidencia original, off-chain)                                                                                          |
+
+
+
 
 ### Agentic / AI
 
-| Componente | Elección |
-|---|---|
-| Orquestador de agentes | LangGraph |
-| Modelo / SDK | Claude Agent SDK o Google Agent Development Kit (ADK) — por definir cuál encaja mejor con LangGraph durante la integración |
-| Alternativa de bajo costo | NVIDIA NIM APIs (gratis, más lentas) como fallback si el volumen de llamadas lo justifica |
-| Contrato de salida | Zod / structured output — la IA nunca escribe directo al kernel, siempre pasa por una `extraction_proposal` validada |
+
+| Componente                                             | Elección                                                                                                                                                                                                                                                                                     |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Modelo / API                                           | **NVIDIA NIM** (compatible con OpenAI, `integrate.api.nvidia.com`, límites gratis generosos) — decidido el 24 sep porque no hay API key de Anthropic disponible                                                                                                                              |
+| Diseño                                                 | Agnóstico de proveedor a propósito: `InvoiceExtractor` (`packages/ai-extraction/src/extractInvoice.ts`) es una interfaz texto→JSON que cualquier LLM implementa; el proveedor real vive aislado en `src/providers/nvidia.ts`. Cambiar de proveedor es agregar un archivo, no reescribir nada |
+| PDF → texto                                            | `pdf-parse` — los modelos de NIM no leen PDF nativo como Claude, así que se extrae el texto plano primero                                                                                                                                                                                    |
+| Contrato de salida                                     | Zod (`InvoiceExtraction`) — la IA nunca escribe directo al kernel; `resolveExtraction()` re-verifica vendor/PO/wallet contra registros reales antes de aceptar                                                                                                                               |
+| Orquestación multi-agente (LangGraph/Claude Agent SDK) | **Fuera de scope del hackathon** — el §9.3 del documento maestro la describe para Fase 3. Hoy solo hay un agente (extracción), no una red de agentes coordinados                                                                                                                             |
+
+
+
 
 ### Blockchain
 
-| Componente | Elección |
-|---|---|
-| Smart contract | Soroban (Rust) — `contracts/payable-contract` |
-| SDK / CLI | Stellar SDK (JS/TS) + Stellar CLI |
-| Settlement | USDC vía Stellar Asset Contract (SAC), Stellar Testnet |
-| Eventos | Stellar RPC `getEvents`, consumidos por el Event Indexer Worker |
+
+| Componente     | Elección                                                        |
+| -------------- | --------------------------------------------------------------- |
+| Smart contract | Soroban (Rust) — `contracts/payable-contract`                   |
+| SDK / CLI      | Stellar SDK (JS/TS) + Stellar CLI                               |
+| Settlement     | USDC vía Stellar Asset Contract (SAC), Stellar Testnet          |
+| Eventos        | Stellar RPC `getEvents`, consumidos por el Event Indexer Worker |
+
+
+
 
 ### Infraestructura / DevOps
 
-| Componente | Elección |
-|---|---|
-| Hosting frontend | Vercel |
-| Hosting backend | Fly.io / Railway (fase de piloto) |
-| CI | GitHub Actions |
-| Monorepo | pnpm workspaces (ya configurado — `packages/canonical-model`, `packages/ingestion`, `packages/rules-kernel`) |
+
+| Componente       | Elección                                                                                                                                                        |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Hosting frontend | Vercel                                                                                                                                                          |
+| Hosting backend  | Fly.io / Railway (fase de piloto)                                                                                                                               |
+| CI               | GitHub Actions                                                                                                                                                  |
+| Monorepo         | pnpm workspaces — `packages/canonical-model`, `packages/ingestion`, `packages/rules-kernel`, `packages/ai-extraction`, `packages/exception-service`, `apps/web` |
+
 
 ---
+
+
 
 ## 4. Diagrama de procesos — pipeline end-to-end
 
@@ -148,7 +198,7 @@ flowchart LR
 
     subgraph DEV2["Dev 2 — Agentic / AI Workflows"]
         B["Ingestion Service<br/>@pakta/ingestion"]
-        C["AI Extraction Service<br/>LangGraph + Claude/ADK"]
+        C["AI Extraction Service<br/>NVIDIA NIM"]
         D["Canonical Payable Model<br/>@pakta/canonical-model"]
         E["Deterministic Control Kernel<br/>@pakta/rules-kernel — 8 reglas §7.3"]
         F["Exception Service<br/>reason_code + owner + required_action"]
@@ -178,7 +228,11 @@ flowchart LR
     L -. "estado visible" .-> CFO(["CFO / Finance Ops"])
 ```
 
+
+
 ---
+
+
 
 ## 5. Diagrama de datos — Canonical Payable Model
 
@@ -248,46 +302,72 @@ erDiagram
     PROOF_OF_PAYABLE ||--|| SETTLEMENT : settles_into
 ```
 
+
+
 `ProofOfPayable` y `Settlement` son el **único contrato compartido** entre Dev 1 y Dev 2 (`Pakta_Division_Trabajo.md` §5) — viven en `@pakta/canonical-model` para que nadie los reinvente de un lado u otro.
 
 ---
+
+
 
 ## 6. Diagrama de construcción — roadmap
 
 Fechas estimadas desde hoy (23 sep), sujetas a ajuste según el cronograma final del hackathon.
 
+> Actualizado el 24 sep 2026. Las secciones/títulos usan solo guion simple (`-`) y sin `/` en los nombres de sección — algunos renderers de Mermaid más viejos rompen con em dash (`—`) o barras dentro de un nombre de `section`. Los nombres de tarea tampoco usan paréntesis `()` ni `+` — otro caso conocido de renderers de Mermaid viejos (por ejemplo la extensión de Mermaid de VSCode, según la versión) que no parsean bien esos caracteres dentro del texto de una tarea de gantt. El detalle que antes iba entre paréntesis está ahora como nota debajo del diagrama. El bloque de abajo pasa validación contra el parser oficial de `mermaid` (probado con `mermaid-cli` 11.x).
+
 ```mermaid
 gantt
-    title Roadmap de construcción — Pakta
+    title Roadmap de construccion - Pakta
     dateFormat YYYY-MM-DD
     axisFormat %d-%b
 
-    section Dev 2 — Agentic / AI
-    Ingestion + Canonical Model            :done, d2s1, 2026-09-20, 4d
-    Deterministic Control Kernel + demo    :done, d2s2, 2026-09-21, 3d
-    AI Extraction (LangGraph + Claude/ADK) :active, d2s3, 2026-09-24, 3d
-    Exception Service (routing real)       :d2s4, after d2s3, 2d
-    Proof-of-Payable Builder               :d2s5, after d2s4, 2d
+    section Dev 2 - Agentic AI
+    Ingestion y Canonical Model         :done, d2s1, 2026-09-20, 4d
+    Deterministic Control Kernel y demo :done, d2s2, 2026-09-21, 3d
+    AI Extraction via NVIDIA NIM        :active, d2s3, 2026-09-24, 2d
+    Exception Service, routing real     :done, d2s4, 2026-09-24, 1d
+    API layer con Fastify               :crit, d2s5, after d2s4, 2d
+    Proof-of-Payable Builder            :d2s6, after d2s5, 1d
+    Dashboard con datos reales          :d2s7, after d2s5, 2d
 
-    section Dev 1 — Web3 / Settlement
-    Soroban contract skeleton + deploy testnet :active, d1s1, 2026-09-24, 3d
-    Entry points + invariantes                  :d1s2, after d1s1, 3d
-    Settlement Adapter + SAC transfer            :d1s3, after d1s2, 2d
-    Event Indexer + reconciliation                :d1s4, after d1s3, 2d
+    section Dev 1 - Web3 Settlement
+    Soroban contract skeleton y deploy testnet :d1s1, 2026-09-25, 3d
+    Entry points y invariantes                 :d1s2, after d1s1, 3d
+    Settlement Adapter y SAC transfer          :d1s3, after d1s2, 2d
+    Event Indexer y reconciliation             :d1s4, after d1s3, 2d
 
-    section Integración
-    Dashboard conectado a datos reales   :d3s1, after d2s5, 2d
-    Demo end-to-end (5 invoices reales)  :milestone, demo, after d1s4, 0d
+    section Integracion
+    Demo end-to-end, 5 invoices reales :milestone, demo, after d1s4, 0d
 ```
 
+> Si tu visor no renderiza el gantt de arriba (algunos renderers de Mermaid livianos, como el integrado en algunos editores, no soportan el tipo de diagrama `gantt` aunque sí soporten flowchart/sequence/state), esta tabla tiene la misma información:
+
+| Dev | Tarea | Estado | Inicio / dependencia | Duración |
+|---|---|---|---|---|
+| Dev 2 - Agentic AI | Ingestion + Canonical Model | done | 2026-09-20 | 4d |
+| Dev 2 - Agentic AI | Deterministic Control Kernel + demo | done | 2026-09-21 | 3d |
+| Dev 2 - Agentic AI | AI Extraction (NVIDIA NIM) | active | 2026-09-24 | 2d |
+| Dev 2 - Agentic AI | Exception Service (routing real) | done | 2026-09-24 | 1d |
+| Dev 2 - Agentic AI | API layer (Fastify) | crit | after Exception Service | 2d |
+| Dev 2 - Agentic AI | Proof-of-Payable Builder | — | after API layer | 1d |
+| Dev 2 - Agentic AI | Dashboard con datos reales | — | after API layer | 2d |
+| Dev 1 - Web3 Settlement | Soroban contract skeleton + deploy testnet | — | 2026-09-25 | 3d |
+| Dev 1 - Web3 Settlement | Entry points + invariantes | — | after skeleton | 3d |
+| Dev 1 - Web3 Settlement | Settlement Adapter + SAC transfer | — | after Entry points | 2d |
+| Dev 1 - Web3 Settlement | Event Indexer + reconciliation | — | after Settlement Adapter | 2d |
+| Integración | Demo end-to-end (5 invoices reales) | milestone | after Event Indexer | 0d |
+
 ---
+
+
 
 ## 7. Qué hemos construido hasta este checkpoint
 
 ```mermaid
 flowchart LR
     A1["Excel / CSV"] --> B["Ingestion Service"]
-    A2["PDF"] --> C["AI Extraction"]
+    A2["PDF"] --> C["AI Extraction<br/>NVIDIA NIM"]
     A3["Email"] --> C
     B --> D["Canonical Payable Model"]
     C --> D
@@ -299,41 +379,51 @@ flowchart LR
     H --> I["Soroban Contract"]
     I --> J[("Stellar / USDC")]
     J --> K["Event Indexer"]
-    K --> L["Reconciliación"]
+    K --> L["Reconciliacion"]
 
     classDef built fill:#1a9c6b,stroke:#0d5c3f,color:#ffffff,font-weight:bold
     classDef nextup fill:#e3a94f,stroke:#8a5f10,color:#2b1c00,font-weight:bold
     classDef planned fill:#c7cbd1,stroke:#5c6270,color:#1b1d24
 
-    class A1,B,D,E built
-    class A2,A3,C,F,G nextup
+    class A1,B,D,E,F built
+    class A2,A3,C,G nextup
     class H,I,J,K,L planned
 ```
 
-🟢 **Construido y testeado** (`main`, 45/45 tests) · 🟠 **Siguiente en la fila** · ⚪ **Planeado**
 
-| Módulo | Estado | Detalle |
-|---|:---:|---|
-| Ingestion Service (`@pakta/ingestion`) | 🟢 | `.xlsx`/`.csv` → Canonical Payable Model, ExcelJS, rechazo fila-por-fila sin abortar el batch |
-| Canonical Payable Model (`@pakta/canonical-model`) | 🟢 | Schemas Zod (Vendor, PO, Invoice, Receipt, Approval, Exception) + contrato `ProofOfPayable`/`Settlement` compartido con Dev 1 |
-| Deterministic Control Kernel (`@pakta/rules-kernel`) | 🟢 | Las 8 reglas de §7.3, mapeadas 1:1 a `reason_code`/`owner_role`/`required_action` de §10 |
-| Fixture del demo canónico (5 invoices, 28,400 USDC) | 🟢 | End-to-end: 1 READY + 4 BLOCKED exactos, reproducible con `pnpm test` |
-| AI Extraction Service (LangGraph, PDF/email → structured output) | 🟠 | En curso |
-| Exception Service (routing/notificaciones reales) | 🟠 | Siguiente — hoy el kernel produce el objeto `Exception`, falta el enrutamiento/notificación |
-| Proof-of-Payable Builder | 🟠 | Siguiente |
-| Soroban Contract (`payable-contract`) | ⚪ | Dev 1 — no iniciado en este checkpoint |
-| Settlement Adapter + Event Indexer | ⚪ | Dev 1 |
-| Dashboard conectado a datos reales | ⚪ | Mockup ya prototipado, falta conectar |
+
+🟢 **Construido y testeado** (`main`, 60/60 tests) · 🟠 **En curso / siguiente** · ⚪ **Planeado**
+
+
+| Módulo                                                                   | Estado | Detalle                                                                                                                                  |
+| ------------------------------------------------------------------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Ingestion Service (`@pakta/ingestion`)                                   | 🟢     | `.xlsx`/`.csv` → Canonical Payable Model, ExcelJS, rechazo fila-por-fila sin abortar el batch                                            |
+| Canonical Payable Model (`@pakta/canonical-model`)                       | 🟢     | Schemas Zod (Vendor, PO, Invoice, Receipt, Approval, Exception) + contrato `ProofOfPayable`/`Settlement` compartido con Dev 1            |
+| Deterministic Control Kernel (`@pakta/rules-kernel`)                     | 🟢     | Las 8 reglas de §7.3, mapeadas 1:1 a `reason_code`/`owner_role`/`required_action` de §10                                                 |
+| Fixture del demo canónico (5 invoices, 28,400 USDC)                      | 🟢     | End-to-end: 1 READY + 4 BLOCKED exactos, reproducible con `pnpm test`                                                                    |
+| Exception Service (`@pakta/exception-service`)                           | 🟢     | `createWebhookNotifier` enruta por `ownerRole`, `notifyExceptions` no aborta el batch si un webhook falla                                |
+| Guardrail anti-alucinación (`resolveExtraction`, `@pakta/ai-extraction`) | 🟢     | Vendor/PO/wallet siempre se resuelven contra registros reales, nunca contra lo que dice la IA; probado contra el kernel real, no un mock |
+| AI Extraction Service — extracción (`extractInvoiceFromPdf`, NVIDIA NIM) | 🟠     | Código y tests con mocks listos; falta `NVIDIA_API_KEY` real y validar con PDFs de verdad                                                |
+| Dashboard (`apps/web`, Next.js)                                          | 🟠     | Existe como mockup navegable — sin datos reales todavía                                                                                  |
+| Proof-of-Payable Builder                                                 | 🟠     | Siguiente                                                                                                                                |
+| API layer (Fastify)                                                      | 🟠     | **Cuello de botella actual** — nada de lo de arriba llega al dashboard sin esto                                                          |
+| Soroban Contract (`payable-contract`)                                    | ⚪      | Dev 1 — no iniciado en este checkpoint                                                                                                   |
+| Settlement Adapter + Event Indexer                                       | ⚪      | Dev 1                                                                                                                                    |
+
 
 **Resultado verificable hoy:**
+
 ```bash
 pnpm install
-pnpm test        # 45/45 passed
-pnpm typecheck    # clean
+pnpm test        # 60/60 passed
+pnpm --filter './packages/*' exec tsc --noEmit   # clean
 ```
+
 Corre el fixture canónico de 5 invoices y produce, de forma determinística, 1 payable `READY` + 4 `BLOCKED` con el `reason_code`/`owner_role`/`required_action` exactos del documento maestro.
 
 ---
+
+
 
 ## 8. Diagrama de estados — ciclo de vida del `Payable`
 
@@ -371,7 +461,11 @@ stateDiagram-v2
     end note
 ```
 
+
+
 ---
+
+
 
 ## 9. Diagrama de secuencia — demo canónico (5 invoices, `fixtures/demo-workbook`)
 
@@ -414,8 +508,62 @@ sequenceDiagram
     REC-->>CFO: 3/5 settled (19,400) · 2 pendientes (9,000) · 0 no autorizados
 ```
 
+
+
 ---
 
-## 10. Próximo paso
 
-Dev 1 construye `contracts/payable-contract` (Soroban): vault prefondeado con caps por payable y ventana, registro de proof firmado, revocación y `settle(payable_id)` autorizado sin parámetros de destinatario ni monto. `attest_lifecycle` solo emite testimonios del issuer para auditoría. El scaffold compila localmente; deploy e invocación en testnet siguen pendientes. En paralelo, Dev 2 conecta AI Extraction (LangGraph + Claude Agent SDK / Google ADK, con NVIDIA NIM como fallback de bajo costo) y arma el Exception Service real.
+
+## 10. Flujo de usuario por actor
+
+No todos los "usuarios" de Pakta hacen lo mismo ni usan la misma pantalla. Esto mapea cada actor real (`Pakta_Documento_Maestro.md` §11) contra lo que ya existe: el `ownerRole` que produce el kernel (`packages/canonical-model/src/schemas.ts`) y el módulo del dashboard (`apps/web`) que le corresponde.
+
+### 10.1 Quién es quién
+
+
+| Actor                         | Qué hace en Pakta                                                           | Pantalla que usa                            | `ownerRole` en código                |
+| ----------------------------- | --------------------------------------------------------------------------- | ------------------------------------------- | ------------------------------------ |
+| **AP / Finance Ops**          | Carga la evidencia (Excel/PDF/email), resuelve duplicados y proofs vencidos | Intake, Payables                            | `AP`                                 |
+| **Procurement**               | Resuelve descalces de monto contra la PO                                    | Exceptions                                  | `PROCUREMENT`                        |
+| **Operations / Requester**    | Confirma que la mercadería/servicio llegó                                   | Exceptions                                  | `OPERATIONS`                         |
+| **Vendor Master**             | Atestigua y reverifica wallets de proveedores                               | Vendors & Wallets                           | `VENDOR_MASTER`                      |
+| **Budget Owner**              | Aprueba cuando se excede presupuesto                                        | Exceptions                                  | `BUDGET_OWNER`                       |
+| **Controller**                | Aprueba pagos grandes (doble aprobación), define policy                     | Policy, Exceptions                          | `CONTROLLER`                         |
+| **Accounting**                | Reconciliación cuando falla el posting al ERP                               | (Dev 1 — fuera de tu scope)                 | `ACCOUNTING`                         |
+| **CFO / Head of Finance Ops** | Solo mira el estado global, no resuelve nada uno por uno                    | Overview                                    | — (no es owner de ninguna exception) |
+| **Vendor (externo)**          | No opera Pakta — solo recibe explicación de por qué no le pagaron           | Ninguna todavía (supplier portal es Fase 2) | —                                    |
+| **Treasury / Dev 1**          | Ejecuta el settlement una vez hay Proof-of-Payable                          | Settlement, Reconciliación                  | — (dominio de Dev 1)                 |
+
+
+Los primeros seis son exactamente los 6 valores no-`ACCOUNTING` de `OwnerRole` en `canonical-model` — no es coincidencia, el modelo de datos ya asumía estos actores desde Sprint 1, solo que hasta ahora no había un dueño humano dibujado al lado de cada uno.
+
+### 10.2 Diagrama de casos de uso (UML)
+
+Mermaid no tiene un tipo de diagrama de casos de uso nativo (sí tiene flowchart, sequence, state, ER, etc., pero no "usecase") — por eso este es un SVG real, con la notación UML clásica: actores (stick figures), casos de uso (óvalos) dentro del límite del sistema, y relaciones `«include»` entre casos de uso.
+
+![Diagrama de casos de uso — Pakta](./assets/dev2-use-case-diagram.svg)
+
+- **Asociación (línea sólida):** un actor participa de ese caso de uso. "Resolver exception" concentra 6 líneas a propósito — es el único caso de uso que comparten todos los owners, cada uno por su propio `reason_code`.
+- `«include»` **(línea punteada):** "Cargar evidencia" siempre dispara "Verificar payable" (el kernel corre automático, no es un paso que el actor pide aparte); "Resolver exception" siempre dispara "Revalidar payable" cuando el owner termina.
+- **CFO** aparece del otro lado a propósito, como en el mockup de referencia — es el único actor cuya flecha nace en el caso de uso hacia él (consulta, no ejecuta).
+
+Fuente editable: `docs/implementation/assets/dev2-use-case-diagram.svg`.
+
+### 10.3 Lo que este diagrama deja en evidencia
+
+El dashboard actual (`apps/web`) ya tiene una pantalla por módulo, pero **es de solo lectura** — ningún actor puede hacer clic en "confirmar receipt" o "reatestiguar wallet" todavía. El flujo de arriba (`ROUTE → owner actúa → revalidate()`) es puramente conceptual mientras eso no exista. Eso apunta a lo que realmente falta antes de agentes más sofisticados:
+
+1. **Una acción real por exception** — que el Exceptions module deje de ser una lista y tenga un botón "resolver" por owner, que dispare `revalidate()` contra el kernel.
+2. **La API layer** que conecte ese botón con el backend (sigue siendo el cuello de botella, como ya habíamos visto).
+
+Recién con eso resuelto tiene sentido meterle agentes que *actúen* en nombre de un owner — hoy no hay ninguna acción de owner que un agente pueda automatizar, porque el owner mismo no tiene cómo actuar todavía.
+
+---
+
+
+
+## 11. Próximo paso
+
+Del lado de Dev 1, `contracts/payable-contract` está desplegado e inicializado en testnet como vault con caps (v3, `CDKC6UYM7JFZOIR3DSSHZWSNFB4NTYQ3X3AVJJ5MIU3UH6H4NBQON5GB`): registro de proof firmado por el issuer, `settle(payable_id)` sin parámetros de destinatario ni monto, revocación firmada por el issuer, `committed`/`available` y `withdraw` al treasury fijado. Verificado de punta a punta contra la red con `pnpm testnet:settle`. Lo que falta del lado de Dev 1 es backend: el Settlement Adapter que consuma un `ProofOfPayable` real de Dev 2, el Event Indexer y el Settlement Agent. El bloqueo compartido es cerrar `ProofOfPayable` v1.1 y regenerar el fixture con wallets de testnet válidas.
+
+Del lado de Dev 2, el cuello de botella dejó de ser el kernel o el Exception Service (ambos ✅) y pasó a ser la **API layer (Fastify)**: sin eso, ni la extracción por IA ni el dashboard pueden dejar de ser mock. Ese es el siguiente paso real, no una historia más de la lista.

@@ -1,0 +1,26 @@
+{
+  "name": "@pakta/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/server.ts",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@pakta/canonical-model": "workspace:*",
+    "@pakta/ingestion": "workspace:*",
+    "@pakta/rules-kernel": "workspace:*",
+    "@pakta/exception-service": "workspace:*",
+    "@pakta/proof-builder": "workspace:*",
+    "@pakta/db": "workspace:*",
+    "@fastify/cors": "11.3.0",
+    "fastify": "5.12.5"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.6",
+    "tsx": "4.23.15"
+  }
+}

@@ -8,3 +8,5 @@ coverage/
 contracts/target/
 .stellar/
 .pnpm-store/
+*.db
+*.db-journal
