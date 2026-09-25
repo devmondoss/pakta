@@ -2,6 +2,7 @@ extern crate std;
 
 mod admin;
 mod digest;
+mod integration;
 mod register;
 mod revoke;
 mod settle;
@@ -135,6 +136,52 @@ impl Harness {
 
     pub fn vault() -> Self {
         Self::new(true)
+    }
+
+    pub fn set_time(&self, unix_seconds: u64) {
+        self.env.ledger().set_timestamp(unix_seconds);
+    }
+
+    /// The test-ledger equivalent of Friendbot: a `G...` address has no account
+    /// entry until something creates one, and without it the SAC refuses to open
+    /// a trustline ("account entry is missing") — exactly as on testnet. Mirrors
+    /// how the SDK itself materializes the issuer account of a test SAC.
+    pub fn create_account(&self, account: &Address) {
+        use soroban_sdk::xdr;
+        use std::rc::Rc;
+
+        let raw = crate::address_bytes::address_to_bytes(&self.env, account).to_array();
+        let id = xdr::AccountId(xdr::PublicKey::PublicKeyTypeEd25519(xdr::Uint256(raw)));
+        let key = Rc::new(xdr::LedgerKey::Account(xdr::LedgerKeyAccount {
+            account_id: id.clone(),
+        }));
+        let entry = Rc::new(xdr::LedgerEntry {
+            data: xdr::LedgerEntryData::Account(xdr::AccountEntry {
+                account_id: id,
+                balance: 0,
+                flags: 0,
+                home_domain: Default::default(),
+                inflation_dest: None,
+                num_sub_entries: 0,
+                seq_num: xdr::SequenceNumber(0),
+                thresholds: xdr::Thresholds([1; 4]),
+                signers: xdr::VecM::default(),
+                ext: xdr::AccountEntryExt::V0,
+            }),
+            last_modified_ledger_seq: 0,
+            ext: xdr::LedgerEntryExt::V0,
+        });
+        self.env
+            .host()
+            .add_ledger_entry(&key, &entry, None)
+            .unwrap();
+    }
+
+    /// A real `G...` account cannot hold a Stellar asset without a trustline —
+    /// the same rule that bit the demo vendors and the treasury on testnet.
+    /// CAP-73's `trust` opens one through the SAC itself.
+    pub fn open_trustline(&self, account: &Address) {
+        StellarAssetClient::new(&self.env, &self.asset).trust(account);
     }
 
     /// A vault whose authorization is real rather than mocked, so that

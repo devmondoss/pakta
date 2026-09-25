@@ -60,10 +60,66 @@ describe("buildProofOfPayable", () => {
     expect(() => buildProofOfPayable(payable, result, now)).toThrow(ProofBuilderError);
   });
 
-  it("produces the same invoice_hash as the payable's own sourceHash (pass-through, not re-derived)", () => {
+  it("never passes a placeholder label off as a hash", () => {
+    // The fixture's sourceHash is the label "sha256:demo-inv-001", not a digest.
+    // v1.0 copied it straight into invoice_hash; the settlement gate rejects that.
+    const { payable, result } = find("INV-001");
+    expect(payable.invoice.sourceHash).toBe("sha256:demo-inv-001");
+
+    const proof = buildProofOfPayable(payable, result, now);
+    expect(proof.invoice_hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(proof.invoice_hash).toBe(canonicalHash(payable.invoice));
+  });
+
+  it("passes a real source digest straight through, with or without a sha256: prefix", () => {
+    const { payable, result } = find("INV-001");
+    const digest = "9".repeat(64);
+
+    for (const sourceHash of [digest, `sha256:${digest}`]) {
+      const withDigest = { ...payable, invoice: { ...payable.invoice, sourceHash } };
+      expect(buildProofOfPayable(withDigest, result, now).invoice_hash).toBe(digest);
+    }
+  });
+});
+
+describe("v1.1 compatibility with the settlement gate", () => {
+  it("formats expires_at to the second — toISOString's milliseconds were rejected by the adapter", () => {
+    const { payable, result } = find("INV-001");
+    const proof = buildProofOfPayable(payable, result, new Date("2026-09-23T09:00:00.789Z"));
+    expect(proof.expires_at).toBe("2026-09-25T09:00:00Z");
+  });
+
+  it("emits every evidence hash as 64 lowercase hex with no prefix", () => {
     const { payable, result } = find("INV-001");
     const proof = buildProofOfPayable(payable, result, now);
-    expect(proof.invoice_hash).toBe(payable.invoice.sourceHash);
+    for (const field of ["invoice_hash", "po_hash", "receipt_hash", "approvals_hash"] as const) {
+      expect(proof[field], field).toMatch(/^[0-9a-f]{64}$/);
+    }
+  });
+
+  it("commits to the receipts, so the proof covers the whole three-way match", () => {
+    const { payable, result } = find("INV-001");
+    const proof = buildProofOfPayable(payable, result, now);
+    expect(proof.receipt_hash).toBe(canonicalHash(payable.receipts));
+
+    const alteredReceipt = { ...payable, receipts: payable.receipts.map((r) => ({ ...r, confirmedQty: 99 })) };
+    expect(buildProofOfPayable(alteredReceipt, result, now).receipt_hash).not.toBe(proof.receipt_hash);
+  });
+
+  it("carries a real Stellar account as vendor_wallet", () => {
+    const { payable, result } = find("INV-001");
+    expect(buildProofOfPayable(payable, result, now).vendor_wallet).toBe(
+      "GAGCMMI5YDAYYVZDMUOZZXEVS3OSSNKTATYHAFMFCCEISRYZH5F4JZI2",
+    );
+  });
+
+  it("refuses to emit a proof the gate would reject, instead of failing three services later", () => {
+    const { payable, result } = find("INV-001");
+    const placeholderWallet = {
+      ...payable,
+      vendorWallet: { ...payable.vendorWallet!, address: "GA1CD9F3KXQPLMN7R2WZT8VY" },
+    };
+    expect(() => buildProofOfPayable(placeholderWallet, result, now)).toThrow(/vendor_wallet/);
   });
 });
 
@@ -74,5 +130,15 @@ describe("canonicalHash", () => {
 
   it("changes when the content changes", () => {
     expect(canonicalHash({ a: 1 })).not.toBe(canonicalHash({ a: 2 }));
+  });
+
+  it("is 64 lowercase hex with no prefix", () => {
+    expect(canonicalHash({ a: 1 })).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("hashes Dates, undefined fields and non-integer quantities deterministically", () => {
+    const value = { at: new Date("2026-09-23T00:00:00Z"), qty: 1.5, missing: undefined };
+    expect(canonicalHash(value)).toBe(canonicalHash({ qty: 1.5, at: new Date("2026-09-23T00:00:00Z") }));
+    expect(canonicalHash(value)).not.toBe(canonicalHash({ ...value, qty: 2.5 }));
   });
 });

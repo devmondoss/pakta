@@ -112,6 +112,42 @@ function decodeStrKey(encoded: string, expectedVersionByte: number, label: strin
   return new Uint8Array(payload);
 }
 
+function base32Encode(data: Uint8Array): string {
+  let bits = 0;
+  let value = 0;
+  let out = "";
+  for (const byte of data) {
+    value = (value << 8) | byte;
+    bits += 8;
+    while (bits >= 5) {
+      out += BASE32_ALPHABET[(value >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+  }
+  if (bits > 0) out += BASE32_ALPHABET[(value << (5 - bits)) & 31];
+  return out;
+}
+
+function encodeStrKey(payload: Uint8Array, versionByte: number, label: string): string {
+  if (payload.length !== 32) {
+    throw new StrKeyError(`${label}: expected 32 bytes, got ${payload.length}`);
+  }
+  const body = new Uint8Array(33);
+  body[0] = versionByte;
+  body.set(payload, 1);
+  const checksum = crc16XModem(body);
+  const full = new Uint8Array(35);
+  full.set(body, 0);
+  full[33] = checksum & 0xff;
+  full[34] = (checksum >> 8) & 0xff;
+  return base32Encode(full);
+}
+
+/** 32 raw ed25519 public-key bytes -> `G...`. */
+export function encodeAccountId(publicKey: Uint8Array): string {
+  return encodeStrKey(publicKey, VERSION_BYTE.accountId, "account id");
+}
+
 /** `G...` -> 32 raw bytes of the ed25519 public key. */
 export function decodeAccountId(accountId: string): Uint8Array {
   return decodeStrKey(accountId, VERSION_BYTE.accountId, "account id");

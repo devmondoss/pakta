@@ -208,6 +208,9 @@ importers:
       '@pakta/rules-kernel':
         specifier: workspace:*
         version: link:../../packages/rules-kernel
+      '@pakta/stellar-sdk-wrapper':
+        specifier: workspace:*
+        version: link:../../packages/stellar-sdk-wrapper
       fastify:
         specifier: 5.12.5
         version: 5.12.5
@@ -334,6 +337,9 @@ importers:
       '@pakta/canonical-model':
         specifier: workspace:*
         version: link:../canonical-model
+      '@pakta/proof-hash':
+        specifier: workspace:*
+        version: link:../proof-hash
       '@pakta/rules-kernel':
         specifier: workspace:*
         version: link:../rules-kernel
@@ -379,6 +385,31 @@ importers:
       js-yaml:
         specifier: 5.4.2
         version: 5.4.2
+
+  packages/settlement:
+    dependencies:
+      '@pakta/canonical-model':
+        specifier: workspace:*
+        version: link:../canonical-model
+      '@pakta/proof-hash':
+        specifier: workspace:*
+        version: link:../proof-hash
+      '@pakta/stellar-sdk-wrapper':
+        specifier: workspace:*
+        version: link:../stellar-sdk-wrapper
+    devDependencies:
+      '@pakta/ingestion':
+        specifier: workspace:*
+        version: link:../ingestion
+      '@pakta/proof-builder':
+        specifier: workspace:*
+        version: link:../proof-builder
+      '@pakta/rules-kernel':
+        specifier: workspace:*
+        version: link:../rules-kernel
+      '@types/node':
+        specifier: 24.13.6
+        version: 24.13.6
 
   packages/stellar-sdk-wrapper: {}
 

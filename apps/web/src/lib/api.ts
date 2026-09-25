@@ -55,6 +55,8 @@ export type ProofOfPayable = {
   payable_id: string;
   invoice_hash: string;
   po_hash: string;
+  /** v1.1: the proof commits to receipts too, so it covers the whole three-way match. */
+  receipt_hash: string;
   vendor_id: string;
   vendor_wallet: string;
   wallet_attestation_version: number;

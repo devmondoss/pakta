@@ -2,6 +2,7 @@ import cors from "@fastify/cors";
 import type { Vendor, VendorWallet } from "@pakta/canonical-model";
 import { attestWallet, registerWalletChange } from "@pakta/db";
 import { buildProofOfPayable, ProofBuilderError } from "@pakta/proof-builder";
+import { isAccountId } from "@pakta/stellar-sdk-wrapper";
 import Fastify from "fastify";
 import { getDb } from "./db.js";
 import { evaluateLive, seedFromFixture } from "./demoData.js";
@@ -85,6 +86,12 @@ export async function buildApp() {
     async (request, reply) => {
       const address = request.body?.address?.trim();
       if (!address) return reply.code(400).send({ error: "address is required" });
+      // Checksum included. Accepting a malformed address here would let a
+      // vendor's payables clear every rule and still be impossible to settle —
+      // the proof builder would refuse them at the very last step.
+      if (!isAccountId(address)) {
+        return reply.code(400).send({ error: `${address} is not a valid Stellar account id (G..., 56 characters)` });
+      }
 
       const wallet = registerWalletChange(db, request.params.vendorId, address, new Date());
       return wallet;

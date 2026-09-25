@@ -16,6 +16,16 @@ async function getPayable(payableId: string): Promise<ApiPayable> {
 }
 
 describe("HU-D2-15: wallet reverification flow", () => {
+  it.each([
+    ["the 24-character placeholder the demo used to ship", "GD2RT5W8XKLQPZ1N6MYH9VFJ"],
+    ["a real address with one character changed (bad checksum)", "GBULRZJR3HMP4DRBMT5OFCO6RIX7QYUC5PVHBCZXXLTBLRTYKZQYIVIM"],
+    ["a contract id instead of an account", "CDKC6UYM7JFZOIR3DSSHZWSNFB4NTYQ3X3AVJJ5MIU3UH6H4NBQON5GB"],
+  ])("refuses %s — it would produce payables that can never settle", async (_label, address) => {
+    const register = await app.inject({ method: "POST", url: "/vendors/VEN-004/wallet", payload: { address } });
+    expect(register.statusCode).toBe(400);
+    expect((await getPayable("PAY-INV-004")).exception?.reason).toBe("VENDOR_WALLET_CHANGED");
+  });
+
   it("INV-004 starts BLOCKED with VENDOR_WALLET_CHANGED", async () => {
     const payable = await getPayable("PAY-INV-004");
     expect(payable.status).toBe("BLOCKED");
@@ -26,12 +36,12 @@ describe("HU-D2-15: wallet reverification flow", () => {
     const register = await app.inject({
       method: "POST",
       url: "/vendors/VEN-004/wallet",
-      payload: { address: "GD2RT5W8XKLQPZ1N6MYH9VFJ" },
+      payload: { address: "GBULRZJR3HMP4DRBMT5OFCO6RIX7QYUC5PVHBCZXXLTBLRTYKZQYIVIN" },
     });
     expect(register.statusCode).toBe(200);
     expect(register.json()).toMatchObject({
       vendorId: "VEN-004",
-      address: "GD2RT5W8XKLQPZ1N6MYH9VFJ",
+      address: "GBULRZJR3HMP4DRBMT5OFCO6RIX7QYUC5PVHBCZXXLTBLRTYKZQYIVIN",
       attestationStatus: "UNATTESTED",
       version: 7,
     });

@@ -1,5 +1,5 @@
 {
-  "name": "@pakta/proof-builder",
+  "name": "@pakta/settlement",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -11,10 +11,12 @@
   "dependencies": {
     "@pakta/canonical-model": "workspace:*",
     "@pakta/proof-hash": "workspace:*",
-    "@pakta/rules-kernel": "workspace:*"
+    "@pakta/stellar-sdk-wrapper": "workspace:*"
   },
   "devDependencies": {
     "@pakta/ingestion": "workspace:*",
+    "@pakta/proof-builder": "workspace:*",
+    "@pakta/rules-kernel": "workspace:*",
     "@types/node": "24.13.6"
   }
 }

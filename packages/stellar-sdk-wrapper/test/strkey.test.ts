@@ -3,6 +3,7 @@ import {
   StrKeyError,
   decodeAccountId,
   decodeContractId,
+  encodeAccountId,
   isAccountId,
   isContractId,
 } from "../src/strkey.js";
@@ -82,5 +83,23 @@ describe("the non-throwing guards", () => {
     expect(isAccountId(USDC_SAC)).toBe(false);
     expect(isContractId(USDC_SAC)).toBe(true);
     expect(isContractId(VEN_004)).toBe(false);
+  });
+});
+
+describe("encodeAccountId", () => {
+  it("is the exact inverse of decodeAccountId", () => {
+    expect(encodeAccountId(decodeAccountId(VEN_004))).toBe(VEN_004);
+  });
+
+  it("produces the account the issuer's public key is known by", () => {
+    // pakta_issuer's public key, as configured in deployments/testnet.json.
+    const publicKey = Buffer.from("a5d05a32bb1950efacd757708e1ff71a647b6e6e0130f64e514c35d5703cf6a6", "hex");
+    const account = encodeAccountId(new Uint8Array(publicKey));
+    expect(isAccountId(account)).toBe(true);
+    expect(Buffer.from(decodeAccountId(account)).toString("hex")).toBe(publicKey.toString("hex"));
+  });
+
+  it("refuses anything that is not 32 bytes", () => {
+    expect(() => encodeAccountId(new Uint8Array(31))).toThrow(StrKeyError);
   });
 });
