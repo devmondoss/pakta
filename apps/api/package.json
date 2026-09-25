@@ -17,6 +17,7 @@
     "@pakta/ingestion": "workspace:*",
     "@pakta/proof-builder": "workspace:*",
     "@pakta/rules-kernel": "workspace:*",
+    "@pakta/settlement": "workspace:*",
     "@pakta/stellar-sdk-wrapper": "workspace:*",
     "fastify": "5.12.5"
   },

@@ -11,7 +11,8 @@
   "dependencies": {
     "@pakta/canonical-model": "workspace:*",
     "@pakta/proof-hash": "workspace:*",
-    "@pakta/stellar-sdk-wrapper": "workspace:*"
+    "@pakta/stellar-sdk-wrapper": "workspace:*",
+    "@stellar/stellar-sdk": "17.1.0"
   },
   "devDependencies": {
     "@pakta/ingestion": "workspace:*",

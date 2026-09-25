@@ -1,12 +1,15 @@
-export function StatusBadge({ status }: { status: "READY" | "BLOCKED" }) {
-  const isReady = status === "READY";
+const STATUS_STYLES = {
+  READY: { pill: "bg-ready-bg text-ready", dot: "bg-ready" },
+  BLOCKED: { pill: "bg-blocked-bg text-blocked", dot: "bg-blocked" },
+  // Paid on Stellar — distinct from READY so nobody reads it as still pending.
+  SETTLED: { pill: "bg-sky-500/10 text-sky-700 dark:text-sky-400", dot: "bg-sky-500" },
+} as const;
+
+export function StatusBadge({ status }: { status: keyof typeof STATUS_STYLES }) {
+  const style = STATUS_STYLES[status];
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${
-        isReady ? "bg-ready-bg text-ready" : "bg-blocked-bg text-blocked"
-      }`}
-    >
-      <span className={`h-1.5 w-1.5 rounded-full ${isReady ? "bg-ready" : "bg-blocked"}`} />
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${style.pill}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
       {status}
     </span>
   );

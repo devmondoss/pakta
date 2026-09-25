@@ -33,7 +33,20 @@ export default async function PayablesPage() {
                 <td className="px-4 py-3 font-mono">{p.amount}</td>
                 <td className="px-4 py-3 text-muted">{p.dueDate}</td>
                 <td className="px-4 py-3">
-                  <StatusBadge status={p.status} />
+                  <div className="flex items-center gap-2">
+                    <StatusBadge status={p.status} />
+                    {p.settlement && (
+                      <a
+                        href={p.settlement.explorerUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-mono text-xs text-muted underline-offset-2 hover:underline"
+                        title={`Ledger ${p.settlement.ledger}`}
+                      >
+                        tx {p.settlement.txHash.slice(0, 8)}…
+                      </a>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

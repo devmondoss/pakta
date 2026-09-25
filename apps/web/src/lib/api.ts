@@ -11,7 +11,7 @@ import type {
 
 const API_URL = process.env.API_URL ?? "http://localhost:4000";
 
-export type PayableStatus = "READY" | "BLOCKED";
+export type PayableStatus = "READY" | "BLOCKED" | "SETTLED";
 
 export type Payable = {
   payableId: string;
@@ -22,6 +22,13 @@ export type Payable = {
   amount: string;
   dueDate: string;
   status: PayableStatus;
+  /** Present once the payable has actually been paid on Stellar. */
+  settlement?: {
+    txHash: string;
+    ledger: number;
+    proofHash: string;
+    explorerUrl: string;
+  };
   exception?: {
     reason: ExceptionReasonCode;
     message: string;
@@ -46,9 +53,11 @@ export type Summary = {
   totalRequested: string;
   totalReady: string;
   totalBlocked: string;
+  totalSettled: string;
   payableCount: number;
   readyCount: number;
   blockedCount: number;
+  settledCount: number;
 };
 
 export type ProofOfPayable = {

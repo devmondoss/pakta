@@ -14,7 +14,19 @@ export type ApiPayable = {
   poId: string;
   amount: string;
   dueDate: string;
-  status: "READY" | "BLOCKED";
+  /**
+   * SETTLED overrides the kernel. Once a payable is paid its fingerprint is
+   * recorded as settled, so re-evaluating it yields PAYMENT_ALREADY_SETTLED —
+   * which is correct for any *other* payable claiming the same invoice, but
+   * would misreport the one that was actually paid as blocked.
+   */
+  status: "READY" | "BLOCKED" | "SETTLED";
+  settlement?: {
+    txHash: string;
+    ledger: number;
+    proofHash: string;
+    explorerUrl: string;
+  };
   exception?: {
     reason: string;
     message: string;
@@ -24,7 +36,9 @@ export type ApiPayable = {
   };
 };
 
-export function toApiPayable(payable: CanonicalPayable, result: KernelResult): ApiPayable {
+export type SettledInfo = { txHash: string; ledger: number; proofHash: string; explorerUrl: string };
+
+export function toApiPayable(payable: CanonicalPayable, result: KernelResult, settled?: SettledInfo): ApiPayable {
   const base: ApiPayable = {
     payableId: payable.payableId,
     invoiceId: payable.invoice.invoiceId,
@@ -35,6 +49,12 @@ export function toApiPayable(payable: CanonicalPayable, result: KernelResult): A
     dueDate: payable.invoice.dueDate.toISOString().slice(0, 10),
     status: result.status,
   };
+
+  if (settled) {
+    base.status = "SETTLED";
+    base.settlement = settled;
+    return base;
+  }
 
   if (result.status === "BLOCKED") {
     const { primaryException } = result;
