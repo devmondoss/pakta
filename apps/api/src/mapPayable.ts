@@ -1,4 +1,4 @@
-import type { CanonicalPayable } from "@pakta/canonical-model";
+import type { CanonicalPayable, Settlement } from "@pakta/canonical-model";
 import type { KernelResult } from "@pakta/rules-kernel";
 
 /**
@@ -14,7 +14,7 @@ export type ApiPayable = {
   poId: string;
   amount: string;
   dueDate: string;
-  status: "READY" | "BLOCKED";
+  status: "READY" | "BLOCKED" | "SETTLED";
   exception?: {
     reason: string;
     message: string;
@@ -22,9 +22,21 @@ export type ApiPayable = {
     ownerRole: string;
     requiredAction: string;
   };
+  settlement?: {
+    txHash: string;
+    ledger: number;
+    network: string;
+    erpPostingStatus: string;
+  };
 };
 
-export function toApiPayable(payable: CanonicalPayable, result: KernelResult): ApiPayable {
+/**
+ * `settlement`, when present, wins over the kernel's own READY/BLOCKED —
+ * once Dev 1 reports a payable settled it stays SETTLED regardless of
+ * what a re-evaluation would say (the kernel has no notion of settlement
+ * at all; that state lives only in `@pakta/db`'s `settlements` table).
+ */
+export function toApiPayable(payable: CanonicalPayable, result: KernelResult, settlement?: Settlement): ApiPayable {
   const base: ApiPayable = {
     payableId: payable.payableId,
     invoiceId: payable.invoice.invoiceId,
@@ -35,6 +47,17 @@ export function toApiPayable(payable: CanonicalPayable, result: KernelResult): A
     dueDate: payable.invoice.dueDate.toISOString().slice(0, 10),
     status: result.status,
   };
+
+  if (settlement) {
+    base.status = "SETTLED";
+    base.settlement = {
+      txHash: settlement.settlement.tx_hash,
+      ledger: settlement.settlement.ledger,
+      network: settlement.settlement.network,
+      erpPostingStatus: settlement.erp_posting_status,
+    };
+    return base;
+  }
 
   if (result.status === "BLOCKED") {
     const { primaryException } = result;

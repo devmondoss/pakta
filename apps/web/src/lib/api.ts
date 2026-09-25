@@ -11,7 +11,7 @@ import type {
 
 const API_URL = process.env.API_URL ?? "http://localhost:4000";
 
-export type PayableStatus = "READY" | "BLOCKED";
+export type PayableStatus = "READY" | "BLOCKED" | "SETTLED";
 
 export type Payable = {
   payableId: string;
@@ -28,6 +28,12 @@ export type Payable = {
     severity: ExceptionSeverity;
     ownerRole: OwnerRole;
     requiredAction: string;
+  };
+  settlement?: {
+    txHash: string;
+    ledger: number;
+    network: string;
+    erpPostingStatus: string;
   };
 };
 
@@ -46,9 +52,11 @@ export type Summary = {
   totalRequested: string;
   totalReady: string;
   totalBlocked: string;
+  totalSettled: string;
   payableCount: number;
   readyCount: number;
   blockedCount: number;
+  settledCount: number;
 };
 
 export type ProofOfPayable = {

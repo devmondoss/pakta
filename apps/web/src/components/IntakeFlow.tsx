@@ -1,11 +1,11 @@
 "use client";
 
 import { useRef, useState } from "react";
-import Link from "next/link";
-import { PipelineStepper } from "@/components/PipelineStepper";
-import type { Summary } from "@/lib/api";
+import { useRouter } from "next/navigation";
 
-type FlowState = "idle" | "uploading" | "processing" | "done";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+
+type FlowState = "idle" | "processing" | "done" | "error";
 
 const PROCESSING_STEPS = [
   "Leyendo el archivo",
@@ -14,83 +14,72 @@ const PROCESSING_STEPS = [
   "Generando resultados",
 ];
 
-export function IntakeFlow({ summary }: { summary: Summary }) {
-  const DONE_STEPS = [
-    {
-      label: "Intake",
-      detail: `${summary.payableCount} filas leídas`,
-      href: "/",
-      state: "done" as const,
-    },
-    {
-      label: "Verificación",
-      detail: "8 reglas del kernel",
-      href: "/payables",
-      state: "done" as const,
-    },
-    {
-      label: "Exceptions",
-      detail: `${summary.blockedCount} bloqueados`,
-      href: "/exceptions",
-      state: "active" as const,
-    },
-    {
-      label: "Proof-of-Payable",
-      detail: `${summary.readyCount} listo`,
-      href: "/proof-of-payable",
-      state: "next" as const,
-    },
-  ];
+type IngestResult = { ingested: number; rejectedRows: { sheet: string; rowNumber: number; errors: string[] }[] };
 
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export function IntakeFlow() {
+  const router = useRouter();
   const [state, setState] = useState<FlowState>("idle");
   const [fileName, setFileName] = useState("");
-  const [progress, setProgress] = useState(0);
   const [stepIndex, setStepIndex] = useState(0);
+  const [result, setResult] = useState<IngestResult | null>(null);
+  const [error, setError] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  function startFlow(name: string) {
-    setFileName(name);
-    setState("uploading");
-    setProgress(0);
-
-    const uploadInterval = setInterval(() => {
-      setProgress((p) => {
-        if (p >= 100) {
-          clearInterval(uploadInterval);
-          setState("processing");
-          runProcessing();
-          return 100;
-        }
-        return p + 8;
-      });
-    }, 60);
-  }
-
-  function runProcessing() {
+  async function ingest(file: File) {
+    setFileName(file.name);
+    setState("processing");
     setStepIndex(0);
-    PROCESSING_STEPS.forEach((_, i) => {
-      setTimeout(
-        () => {
-          setStepIndex(i + 1);
-          if (i === PROCESSING_STEPS.length - 1) {
-            setTimeout(() => setState("done"), 400);
-          }
-        },
-        500 + i * 550,
-      );
-    });
+    setError("");
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    // The step reveal is real-time-shaped (each step gets a minimum
+    // on-screen moment so it's readable), but the *result* it ends on is
+    // whatever the actual /ingest response says — never canned.
+    const revealSteps = (async () => {
+      for (let i = 0; i < PROCESSING_STEPS.length - 1; i++) {
+        await wait(350);
+        setStepIndex(i + 1);
+      }
+    })();
+
+    const request = fetch(`${API_URL}/ingest`, { method: "POST", body: formData })
+      .then(async (res) => {
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+        return body as IngestResult;
+      });
+
+    try {
+      const [, outcome] = await Promise.all([revealSteps, request]);
+      setStepIndex(PROCESSING_STEPS.length);
+      await wait(300);
+      setResult(outcome);
+      setState("done");
+      router.refresh();
+      document.getElementById("resultados")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (err) {
+      setError((err as Error).message);
+      setState("error");
+    }
   }
 
   function reset() {
     setState("idle");
     setFileName("");
-    setProgress(0);
     setStepIndex(0);
+    setResult(null);
+    setError("");
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div>
       {state === "idle" && (
         <div
           onDragOver={(e) => {
@@ -102,76 +91,44 @@ export function IntakeFlow({ summary }: { summary: Summary }) {
             e.preventDefault();
             setDragOver(false);
             const file = e.dataTransfer.files[0];
-            if (file) startFlow(file.name);
+            if (file) ingest(file);
           }}
           onClick={() => inputRef.current?.click()}
-          className={`cursor-pointer rounded-3xl bg-surface p-10 text-center shadow-[var(--shadow)] transition-colors ${
-            dragOver ? "ring-2 ring-accent/40" : ""
+          className={`cursor-pointer rounded-3xl border border-dashed p-10 text-center transition-colors ${
+            dragOver ? "border-accent bg-accent/5" : "border-border hover:border-muted"
           }`}
         >
           <input
             ref={inputRef}
             type="file"
-            accept=".xlsx,.csv"
+            accept=".xlsx"
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0];
-              if (file) startFlow(file.name);
+              if (file) ingest(file);
             }}
           />
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-ready-bg text-ready">
-            <ArrowUpIcon />
-          </div>
-          <p className="text-sm font-medium">Arrastrá tu Excel/CSV acá o hacé click para elegir un archivo</p>
-          <p className="mt-1 text-xs text-muted">PDF y email — próximamente</p>
-
-          <div className="mt-6 flex items-center justify-center gap-2">
-            <SourcePill label="Excel / CSV" active />
-            <SourcePill label="PDF" />
-            <SourcePill label="Email" />
-          </div>
-        </div>
-      )}
-
-      {state === "uploading" && (
-        <div className="rounded-3xl bg-surface p-10 shadow-[var(--shadow)]">
-          <div className="mb-4 flex items-center justify-between">
-            <p className="text-sm font-medium">Subiendo {fileName}</p>
-            <span className="text-xs text-muted">{Math.min(progress, 100)}%</span>
-          </div>
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-background">
-            <div
-              className="h-full rounded-full bg-accent transition-all duration-100"
-              style={{ width: `${Math.min(progress, 100)}%` }}
-            />
-          </div>
+          <p className="text-sm text-muted">
+            Arrastrá un workbook acá, o{" "}
+            <span className="text-foreground underline underline-offset-2">elegí uno</span>
+          </p>
+          <p className="mt-1 text-xs text-muted/70">.xlsx — VENDORS, PO, INVOICES, RECEIPTS, APPROVALS</p>
         </div>
       )}
 
       {state === "processing" && (
-        <div className="rounded-3xl bg-surface p-10 shadow-[var(--shadow)]">
-          <p className="mb-5 text-sm font-medium">Procesando {fileName}</p>
-          <div className="flex flex-col gap-3.5">
+        <div className="rounded-3xl bg-surface p-8">
+          <div className="flex flex-col gap-3">
             {PROCESSING_STEPS.map((label, i) => {
               const status = i < stepIndex ? "done" : i === stepIndex ? "active" : "pending";
               return (
                 <div key={label} className="flex items-center gap-3">
-                  {status === "done" && (
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-ready text-[10px] text-white">
-                      ✓
-                    </span>
-                  )}
+                  {status === "done" && <span className="h-1.5 w-1.5 rounded-full bg-ready" />}
                   {status === "active" && (
-                    <span className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-accent/25 border-t-accent" />
+                    <span className="h-3 w-3 animate-spin rounded-full border-2 border-accent/25 border-t-accent" />
                   )}
-                  {status === "pending" && (
-                    <span className="h-5 w-5 shrink-0 rounded-full bg-background" />
-                  )}
-                  <span
-                    className={`text-sm ${status === "pending" ? "text-muted" : "text-foreground"}`}
-                  >
-                    {label}
-                  </span>
+                  {status === "pending" && <span className="h-1.5 w-1.5 rounded-full bg-border" />}
+                  <span className={`text-sm ${status === "pending" ? "text-muted" : "text-foreground"}`}>{label}</span>
                 </div>
               );
             })}
@@ -179,83 +136,37 @@ export function IntakeFlow({ summary }: { summary: Summary }) {
         </div>
       )}
 
-      {state === "done" && (
-        <>
-          <div className="rounded-3xl bg-surface p-8 shadow-[var(--shadow)]">
-            <div className="mb-5 flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium">{fileName}</p>
-                <p className="text-xs text-muted">
-                  {summary.payableCount} invoices · {summary.totalRequested} USDC solicitado
-                </p>
-              </div>
-              <span className="rounded-full bg-ready-bg px-2.5 py-1 text-xs font-medium text-ready">
-                Procesado
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-2xl bg-ready-bg p-4">
-                <p className="text-xs text-ready">Ready</p>
-                <p className="mt-1 font-mono text-lg font-medium text-ready">
-                  {summary.totalReady} USDC
-                </p>
-              </div>
-              <div className="rounded-2xl bg-blocked-bg p-4">
-                <p className="text-xs text-blocked">Bloqueado</p>
-                <p className="mt-1 font-mono text-lg font-medium text-blocked">
-                  {summary.totalBlocked} USDC
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-5 flex items-center gap-3">
-              <Link
-                href="/exceptions"
-                className="rounded-full bg-accent px-4 py-2 text-xs font-medium text-accent-foreground shadow-[var(--shadow)] hover:opacity-90"
-              >
-                Ver Exceptions
-              </Link>
-              <button
-                onClick={reset}
-                className="rounded-full bg-background px-4 py-2 text-xs font-medium text-muted hover:text-foreground"
-              >
-                Cargar otro archivo
-              </button>
-            </div>
-
-            <p className="mt-5 text-xs text-muted">
-              Mockup: el resultado siempre es el fixture de 5 invoices, sin importar el archivo que
-              subas — el AI Extraction Service real todavía no existe (Sprint 2).
+      {state === "done" && result && (
+        <div className="rounded-3xl bg-surface p-6">
+          <div className="flex items-center justify-between">
+            <p className="text-sm">
+              <span className="text-ready">Listo.</span> {fileName} — {result.ingested} payables ingestados de verdad,
+              persistidos en la base.
             </p>
+            <button onClick={reset} className="shrink-0 text-xs text-muted hover:text-foreground">
+              Cargar otro
+            </button>
           </div>
+          {result.rejectedRows.length > 0 && (
+            <div className="mt-3 flex flex-col gap-1 border-t border-border/60 pt-3 text-xs text-blocked">
+              {result.rejectedRows.map((row, i) => (
+                <span key={i}>
+                  {row.sheet} fila {row.rowNumber}: {row.errors.join(", ")}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
-          <div className="rounded-3xl bg-surface p-8 shadow-[var(--shadow)]">
-            <PipelineStepper steps={DONE_STEPS} />
-          </div>
-        </>
+      {state === "error" && (
+        <div className="flex items-center justify-between rounded-3xl bg-surface p-6">
+          <p className="text-sm text-blocked">{error}</p>
+          <button onClick={reset} className="shrink-0 text-xs text-muted hover:text-foreground">
+            Reintentar
+          </button>
+        </div>
       )}
     </div>
-  );
-}
-
-function SourcePill({ label, active }: { label: string; active?: boolean }) {
-  return (
-    <span
-      onClick={(e) => e.stopPropagation()}
-      className={`rounded-full px-3 py-1 text-xs font-medium ${
-        active ? "bg-ready-bg text-ready" : "bg-background text-muted"
-      }`}
-    >
-      {label}
-    </span>
-  );
-}
-
-function ArrowUpIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M12 19V5M5 12l7-7 7 7" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
   );
 }

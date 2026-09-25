@@ -9,6 +9,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@neondatabase/serverless": "1.1.0",
     "@pakta/canonical-model": "workspace:*"
   },
   "devDependencies": {

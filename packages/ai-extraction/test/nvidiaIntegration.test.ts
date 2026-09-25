@@ -21,22 +21,36 @@ describe.skipIf(!process.env.NVIDIA_API_KEY)("real NVIDIA NIM extraction (HU-D2-
   // and `createNvidiaExtractor()` throws immediately without a key.
   const extractor = () => createNvidiaExtractor();
 
-  for (const invoice of demoInvoices.invoices as {
-    file: string;
-    layout: string;
-    expected: { vendorName: string; invoiceId: string; amount: string; poReference: string; walletAddress: string };
-  }[]) {
+  const invoices = (
+    demoInvoices.invoices as {
+      file: string;
+      layout: string;
+      excludeFromGenericCheck?: boolean;
+      expected?: { vendorName: string; invoiceId: string; amount: string; poReference?: string; walletAddress?: string };
+      expectAbsent?: ("poReference" | "walletAddress")[];
+    }[]
+  ).filter((invoice) => !invoice.excludeFromGenericCheck);
+
+  for (const invoice of invoices) {
     it(
       `extracts ${invoice.file} (${invoice.layout}) correctly`,
       async () => {
         const pdfBuffer = readFileSync(path.join(fixturesDir, invoice.file));
         const result = await extractInvoiceFromPdf(pdfBuffer, { extractor: extractor() });
+        const expected = invoice.expected!;
 
-        expect(result.vendorName.value.toLowerCase()).toContain(invoice.expected.vendorName.split(" ")[0]!.toLowerCase());
-        expect(result.invoiceId.value).toBe(invoice.expected.invoiceId);
-        expect(result.amount.value).toBe(invoice.expected.amount);
-        expect(result.poReference?.value).toBe(invoice.expected.poReference);
-        expect(result.walletAddress?.value).toBe(invoice.expected.walletAddress);
+        expect(result.vendorName.value.toLowerCase()).toContain(expected.vendorName.split(" ")[0]!.toLowerCase());
+        expect(result.invoiceId.value).toBe(expected.invoiceId);
+        expect(result.amount.value).toBe(expected.amount);
+        if (expected.poReference) expect(result.poReference?.value).toBe(expected.poReference);
+        if (expected.walletAddress) expect(result.walletAddress?.value).toBe(expected.walletAddress);
+
+        // The schema's "omit this key entirely rather than guessing a
+        // value" instruction — a field with nothing to extract must be
+        // ABSENT, not hallucinated as an empty string or a guess.
+        for (const field of invoice.expectAbsent ?? []) {
+          expect(result[field]).toBeUndefined();
+        }
 
         // HU-D2-11's auditability criterion: every field carries its own
         // confidence and the exact source text it came from.
@@ -48,7 +62,7 @@ describe.skipIf(!process.env.NVIDIA_API_KEY)("real NVIDIA NIM extraction (HU-D2-
       // This model reasons at length before answering — a single call
       // against the full extraction prompt can take 1-3 minutes, with
       // real variance run to run (it's genuinely thinking, not stuck).
-      240_000,
+      300_000,
     );
   }
 });

@@ -67,15 +67,15 @@
 
 ---
 
-## Sprint 3 — 🟡 En progreso
+## Sprint 3 — 🟡 3/4 (lo único que falta está bloqueado por Dev 1)
 **Goal:** *"El pipeline completo, incluyendo el hand-off a Dev 1 y el dashboard, corre sin pasos manuales."*
 
 | ID | Historia | Criterios de aceptación | Verificación (DoD) | Estado |
 |---|---|---|---|:---:|
 | HU-D2-16 | Proof-of-Payable Builder arma el objeto del contrato apenas un payable llega a `READY` | Genera el shape exacto del contrato de datos, sin campos faltantes | Test contra el schema `ProofOfPayable` de `@pakta/canonical-model` | ✅ (`packages/proof-builder`, 6 tests) |
-| HU-D2-17 | Dev 1 recibe el `ProofOfPayable` sin transformarlo | **Integration checkpoint** con el Settlement Adapter de Dev 1 | Corrida conjunta con Dev 1 | ⬜ (bloqueado — Dev 1 aún no tiene Settlement Adapter) |
+| HU-D2-17 | Dev 1 recibe el `ProofOfPayable` sin transformarlo | **Integration checkpoint** con el Settlement Adapter de Dev 1 | Corrida conjunta con Dev 1 | 🟡 Nuestro lado 100% listo: `GET /payables/:id/proof` (emite) + `POST /payables/:id/settlement` (recibe de vuelta, con `@pakta/db`/Neon persistiendo el resultado e idempotencia real vía `payable_id` como llave primaria). Bloqueado — Dev 1 aún no tiene Settlement Adapter para probar la corrida conjunta. |
 | HU-D2-18 | Dashboard (Payables, Vendors & Wallets, Exceptions, Proof-of-Payable) con datos reales | Los 4 módulos leen del backend real, no de arrays hardcodeados | Prueba manual + smoke test de cada endpoint | ✅ (`apps/web` conectado a `apps/api`, `mock-data.ts` eliminado) |
-| HU-D2-19 | Ensayar el demo script completo (§25 maestro) hasta antes del settlement real | 5 invoices, 2 resoluciones, revalidación — sin intervención manual salvo `settle()` de Dev 1 | Corrida en vivo, grabada o ante el equipo | ⬜ |
+| HU-D2-19 | Ensayar el demo script completo (§25 maestro) hasta antes del settlement real | 5 invoices, 2 resoluciones, revalidación — sin intervención manual salvo `settle()` de Dev 1 | Corrida en vivo, grabada o ante el equipo | ✅ Corrida en vivo contra `apps/api` + Neon real, 24 sep 2026. Estado inicial exacto (1 READY + 4 BLOCKED, mismos reason codes que §25). Se resolvieron las 2 excepciones del guion — wallet de INV-004 (`POST /vendors/:id/wallet` + `/attest`) y recepción de INV-005 (`POST /payables/:id/receipt`, endpoint nuevo, no existía) — y el sistema revalidó solo, sin llamar `/revalidate` a mano. Resultado: Requested 28,400 / Ready 19,400 / Blocked 9,000 — **exacto** al guion. Proof-of-Payable construido para los 3 READY (5,000 + 8,000 + 6,400 = 19,400). Se detuvo ahí, antes de `settle()`, tal como pide la historia. |
 
 **Sprint Review 3 / Demo:** nivel 4 — Definition of Done de plataforma completa (ver abajo).
 
@@ -137,7 +137,7 @@ Vive en `packages/canonical-model` (`src/proof.ts`). **Regla de oro: nunca escri
 ## Resumen de dónde estás parado
 - **Sprint 1: 10/10 ✅**
 - **Sprint 2: 5/5 ✅ (HU-D2-11, HU-D2-12, HU-D2-13, HU-D2-14, HU-D2-15)**
-- **Sprint 3: 2/4 ✅ (HU-D2-16, HU-D2-18) + 2/4 ⬜ (HU-D2-17 bloqueado por Dev 1, HU-D2-19)**
-- **Total: 17/19 completas, 2 pendientes (HU-D2-17 bloqueada por Dev 1, HU-D2-19 — el ensayo final — es lo único que te queda a vos)**
+- **Sprint 3: 3/4 ✅ (HU-D2-16, HU-D2-18, HU-D2-19) + 1/4 ⬜ (HU-D2-17, bloqueado por Dev 1)**
+- **Total: 18/19 completas. La única pendiente (HU-D2-17) no depende de vos — es Dev 1 quien tiene que construir el Settlement Adapter.**
 
-*Fuente: `Pakta_Division_Trabajo.md` §5, extraído el 23 sep 2026. Actualizado el 24 sep 2026 tras construir `packages/ai-extraction`, `apps/web`, `apps/api` y `packages/proof-builder`.*
+*Fuente: `Pakta_Division_Trabajo.md` §5, extraído el 23 sep 2026. Actualizado el 24 sep 2026 tras construir `packages/ai-extraction`, `apps/web`, `apps/api`, `packages/proof-builder` y `packages/db` (Postgres real en Neon, reemplazando SQLite).*

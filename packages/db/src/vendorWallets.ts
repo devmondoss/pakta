@@ -19,20 +19,21 @@ function toVendorWallet(row: WalletRow): VendorWallet {
   };
 }
 
-export function getWallet(db: Db, vendorId: string): VendorWallet | undefined {
-  const row = db.prepare("SELECT * FROM vendor_wallets WHERE vendor_id = ?").get(vendorId) as
-    | WalletRow
-    | undefined;
-  return row ? toVendorWallet(row) : undefined;
+export async function getWallet(db: Db, vendorId: string): Promise<VendorWallet | undefined> {
+  const rows = (await db.query(`SELECT * FROM ${db.schema}.vendor_wallets WHERE vendor_id = $1`, [
+    vendorId,
+  ])) as WalletRow[];
+  return rows[0] ? toVendorWallet(rows[0]) : undefined;
 }
 
 /** Only inserts if the vendor has no wallet on file yet — used to seed from the fixture without ever clobbering a reverification that already happened. */
-export function seedWalletIfAbsent(db: Db, wallet: VendorWallet): void {
-  db.prepare(
-    `INSERT INTO vendor_wallets (vendor_id, address, attestation_status, version, created_at)
-     VALUES (?, ?, ?, ?, ?)
+export async function seedWalletIfAbsent(db: Db, wallet: VendorWallet): Promise<void> {
+  await db.query(
+    `INSERT INTO ${db.schema}.vendor_wallets (vendor_id, address, attestation_status, version, created_at)
+     VALUES ($1, $2, $3, $4, $5)
      ON CONFLICT (vendor_id) DO NOTHING`,
-  ).run(wallet.vendorId, wallet.address, wallet.attestationStatus, wallet.version, wallet.createdAt.toISOString());
+    [wallet.vendorId, wallet.address, wallet.attestationStatus, wallet.version, wallet.createdAt.toISOString()],
+  );
 }
 
 /**
@@ -41,21 +42,22 @@ export function seedWalletIfAbsent(db: Db, wallet: VendorWallet): void {
  * `VENDOR_WALLET_CHANGED` rule fire on the next evaluation, exactly the
  * same as an invoice showing up with an unrecognized wallet.
  */
-export function registerWalletChange(db: Db, vendorId: string, address: string, now: Date): VendorWallet {
-  const current = getWallet(db, vendorId);
+export async function registerWalletChange(db: Db, vendorId: string, address: string, now: Date): Promise<VendorWallet> {
+  const current = await getWallet(db, vendorId);
   const nextVersion = (current?.version ?? 0) + 1;
 
-  db.prepare(
-    `INSERT INTO vendor_wallets (vendor_id, address, attestation_status, version, created_at)
-     VALUES (?, ?, 'UNATTESTED', ?, ?)
+  await db.query(
+    `INSERT INTO ${db.schema}.vendor_wallets (vendor_id, address, attestation_status, version, created_at)
+     VALUES ($1, $2, 'UNATTESTED', $3, $4)
      ON CONFLICT (vendor_id) DO UPDATE SET
        address = excluded.address,
        attestation_status = excluded.attestation_status,
        version = excluded.version,
        created_at = excluded.created_at`,
-  ).run(vendorId, address, nextVersion, now.toISOString());
+    [vendorId, address, nextVersion, now.toISOString()],
+  );
 
-  return getWallet(db, vendorId)!;
+  return (await getWallet(db, vendorId))!;
 }
 
 /**
@@ -64,10 +66,12 @@ export function registerWalletChange(db: Db, vendorId: string, address: string, 
  * policy requires). Clears `UNATTESTED_WALLET`/`VENDOR_WALLET_CHANGED` on
  * the payable the next time it's evaluated.
  */
-export function attestWallet(db: Db, vendorId: string): VendorWallet {
-  const current = getWallet(db, vendorId);
+export async function attestWallet(db: Db, vendorId: string): Promise<VendorWallet> {
+  const current = await getWallet(db, vendorId);
   if (!current) throw new Error(`no wallet on file for vendor ${vendorId}`);
 
-  db.prepare("UPDATE vendor_wallets SET attestation_status = 'ATTESTED' WHERE vendor_id = ?").run(vendorId);
-  return getWallet(db, vendorId)!;
+  await db.query(`UPDATE ${db.schema}.vendor_wallets SET attestation_status = 'ATTESTED' WHERE vendor_id = $1`, [
+    vendorId,
+  ]);
+  return (await getWallet(db, vendorId))!;
 }
