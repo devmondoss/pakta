@@ -1,6 +1,8 @@
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, symbol_short, token, Address, BytesN, Env, Symbol, Vec};
+use soroban_sdk::{
+    contract, contractimpl, symbol_short, token, Address, BytesN, Env, String, Symbol, Vec,
+};
 
 pub mod address_bytes;
 pub mod digest;
@@ -8,7 +10,10 @@ pub mod events;
 pub mod types;
 
 use address_bytes::address_to_bytes;
-use digest::{registration_digest, revocation_digest, RegistrationFields, RevocationFields};
+use digest::{
+    attestation_digest, reason_hash, registration_digest, revocation_digest, AttestationFields,
+    RegistrationFields, RevocationFields,
+};
 use types::{Config, DataKey, Error, IssuerSignature, Payable, SpendWindow, Status};
 
 /// How long a payable entry is kept alive, and when a touch renews it.
@@ -60,7 +65,7 @@ pub struct PayableContract;
 #[contractimpl]
 impl PayableContract {
     pub fn contract_version() -> u32 {
-        3
+        4
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -151,6 +156,12 @@ impl PayableContract {
         }
         if expiry <= env.ledger().timestamp() {
             return Err(Error::InvalidExpiry);
+        }
+        // The anti-replay retention is sized against this ceiling (see the
+        // const assert above). Enforcing it here turns that sizing from an
+        // assumption about what issuers will sign into a guarantee.
+        if expiry - env.ledger().timestamp() > LONGEST_PROOF_WINDOW_SECONDS {
+            return Err(Error::ProofWindowTooLong);
         }
         // Refuse to authorize an obligation the vault cannot actually honour.
         // Without this the gate would happily promise more than it holds and
@@ -268,27 +279,41 @@ impl PayableContract {
     /// payables have actually been expired. Sweeping them is an operational
     /// duty, not something the chain does by itself.
     pub fn expire(env: Env, payable_id: BytesN<32>) -> Result<(), Error> {
-        let mut payable = load_payable(&env, &payable_id)?;
+        let payable = load_payable(&env, &payable_id)?;
         if payable.status != Status::Ready {
             return Err(Error::NotReady);
         }
         if env.ledger().timestamp() <= payable.expiry {
             return Err(Error::ProofNotExpired);
         }
-
-        payable.status = Status::Expired;
-        env.storage()
-            .persistent()
-            .set(&DataKey::Payable(payable_id.clone()), &payable);
-        bump_payable(&env, &payable_id);
-        release(&env, payable.amount);
-
-        events::PayableExpired {
-            payable_id,
-            expiry: payable.expiry,
-        }
-        .publish(&env);
+        expire_ready(&env, &payable_id, payable);
         Ok(())
+    }
+
+    /// Sweeps several payables in one transaction and returns how many it
+    /// actually expired.
+    ///
+    /// Anything not expirable - still live, already settled, revoked, or
+    /// unknown - is skipped rather than failing the batch. A sweep is cleanup:
+    /// one payable that settled a moment ago must not stop the rest from
+    /// releasing their commitments.
+    pub fn expire_batch(env: Env, payable_ids: Vec<BytesN<32>>) -> u32 {
+        let now = env.ledger().timestamp();
+        let mut expired = 0;
+        for payable_id in payable_ids.iter() {
+            let Some(payable) = env
+                .storage()
+                .persistent()
+                .get::<_, Payable>(&DataKey::Payable(payable_id.clone()))
+            else {
+                continue;
+            };
+            if payable.status == Status::Ready && now > payable.expiry {
+                expire_ready(&env, &payable_id, payable);
+                expired += 1;
+            }
+        }
+        expired
     }
 
     /// Invalidates a payable before it settles, and releases what it held.
@@ -301,9 +326,11 @@ impl PayableContract {
     /// evidence behind a proof still holds is the issuer's judgement, and an
     /// Ed25519 verification key cannot `require_auth`, so the authorization
     /// takes the same shape as registration: a signed digest the contract
-    /// recomputes. `PAKTA_REV_V1` keeps it from being interchangeable with a
-    /// registration signature, and `proof_hash` binds it to the exact
-    /// registration it cancels.
+    /// recomputes. Its own domain keeps it from being interchangeable with a
+    /// registration signature, `proof_hash` binds it to the exact registration
+    /// it cancels, and the reason is signed too - so the justification the
+    /// indexer records is the one the issuer gave, not whatever the submitter
+    /// typed.
     ///
     /// One-way, and it cannot touch a settled payable. The worst a
     /// compromised issuer key achieves here is refusing to pay — never
@@ -311,7 +338,7 @@ impl PayableContract {
     pub fn revoke_payable(
         env: Env,
         payable_id: BytesN<32>,
-        reason_code: Symbol,
+        reason_code: String,
         signatures: Vec<IssuerSignature>,
     ) -> Result<(), Error> {
         let config = load_config(&env)?;
@@ -328,6 +355,7 @@ impl PayableContract {
                 contract_id: address_to_bytes(&env, &env.current_contract_address()),
                 payable_id_hash: payable_id.clone(),
                 proof_hash: payable.proof_hash.clone(),
+                reason_hash: reason_hash(&env, &reason_code),
             },
         );
         verify_issuer_signatures(&env, &config, &digest, &signatures)?;
@@ -390,40 +418,117 @@ impl PayableContract {
         Ok(available(&env, &config))
     }
 
-    /// Relays an off-chain lifecycle fact to the ledger as an event. Emits
-    /// only — it cannot change a payable's status, so a compromised issuer
-    /// cannot use it to unblock money.
+    /// Relays an off-chain lifecycle fact — an exception raised, resolved or
+    /// reconciled — to the ledger as an event, authorized by the issuer.
+    ///
+    /// Issuer-signed rather than admin-gated for the same reason revocation
+    /// is: these are the issuer's testimonies, and the event is only worth
+    /// anything if the issuer is the one who gave it. It emits and nothing
+    /// else — it cannot change a payable's status — so even a compromised
+    /// issuer key cannot use it to unblock money.
+    ///
+    /// Callable by anyone who holds a valid signature, like registration.
     pub fn attest_lifecycle(
         env: Env,
         payable_id: BytesN<32>,
-        reason_code: Symbol,
+        reason_code: String,
         phase: Symbol,
+        sequence: u64,
+        signatures: Vec<IssuerSignature>,
     ) -> Result<(), Error> {
         let config = load_config(&env)?;
-        config.admin.require_auth();
 
-        if phase == PHASE_BLOCKED {
-            events::PayableBlocked {
-                payable_id,
-                reason_code,
-            }
-            .publish(&env);
+        let phase_code: u8 = if phase == PHASE_BLOCKED {
+            0
         } else if phase == PHASE_RESOLVED {
-            events::ExceptionResolved {
-                payable_id,
-                reason_code,
-            }
-            .publish(&env);
+            1
         } else if phase == PHASE_RECONCIL {
-            events::PayableReconciled {
-                payable_id,
-                reason_code,
-            }
-            .publish(&env);
+            2
         } else {
             return Err(Error::UnknownPhase);
-        }
+        };
 
+        let digest = attestation_digest(
+            &env,
+            &AttestationFields {
+                network_id: config.network_id.clone(),
+                contract_id: address_to_bytes(&env, &env.current_contract_address()),
+                payable_id_hash: payable_id.clone(),
+                phase: phase_code,
+                reason_hash: reason_hash(&env, &reason_code),
+                sequence,
+            },
+        );
+        verify_issuer_signatures(&env, &config, &digest, &signatures)?;
+
+        match phase_code {
+            0 => events::PayableBlocked {
+                payable_id,
+                reason_code,
+                sequence,
+            }
+            .publish(&env),
+            1 => events::ExceptionResolved {
+                payable_id,
+                reason_code,
+                sequence,
+            }
+            .publish(&env),
+            _ => events::PayableReconciled {
+                payable_id,
+                reason_code,
+                sequence,
+            }
+            .publish(&env),
+        }
+        Ok(())
+    }
+
+    /// Replaces this contract's code while keeping its address and all of its
+    /// state — payables, commitments, the spend window, configuration.
+    ///
+    /// Before v4 every change meant a new deployment: a new contract id to
+    /// re-point every service at, a fresh `initialize`, and the float moved
+    /// by hand. With this, the contract id is stable from here on.
+    ///
+    /// Admin-only. Worth being explicit that this is the most powerful key in
+    /// the system: new code can do anything. It belongs in the same custody as
+    /// the treasury, not on an application server.
+    pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) -> Result<(), Error> {
+        let config = load_config(&env)?;
+        config.admin.require_auth();
+        env.deployer()
+            .update_current_contract_wasm(new_wasm_hash.clone());
+        events::ContractUpgraded { new_wasm_hash }.publish(&env);
+        Ok(())
+    }
+
+    /// Hands administration to a new address. Both the current and the new
+    /// admin must authorize, so a typo cannot hand the gate to an address
+    /// nobody controls — which, with no admin, would freeze it for good.
+    pub fn set_admin(env: Env, new_admin: Address) -> Result<(), Error> {
+        let mut config = load_config(&env)?;
+        config.admin.require_auth();
+        new_admin.require_auth();
+        config.admin = new_admin.clone();
+        env.storage().instance().set(&DataKey::Config, &config);
+        bump_instance(&env);
+        events::AdminChanged { new_admin }.publish(&env);
+        Ok(())
+    }
+
+    /// Moves the withdrawal destination. Requires the *current treasury's*
+    /// consent as well as the admin's: otherwise an admin key alone could
+    /// point the treasury at itself and then withdraw, undoing the whole point
+    /// of pinning the destination.
+    pub fn set_treasury(env: Env, new_treasury: Address) -> Result<(), Error> {
+        let mut config = load_config(&env)?;
+        config.admin.require_auth();
+        config.treasury.require_auth();
+        config.treasury = new_treasury.clone();
+        env.storage().instance().set(&DataKey::Config, &config);
+        bump_instance(&env);
+        events::TreasuryChanged { new_treasury }.publish(&env);
         Ok(())
     }
 
@@ -497,6 +602,23 @@ impl PayableContract {
         bump_instance(&env);
         Ok(())
     }
+}
+
+/// Moves a READY payable whose proof has lapsed to EXPIRED and releases its
+/// commitment. Callers check the preconditions.
+fn expire_ready(env: &Env, payable_id: &BytesN<32>, mut payable: Payable) {
+    payable.status = Status::Expired;
+    env.storage()
+        .persistent()
+        .set(&DataKey::Payable(payable_id.clone()), &payable);
+    bump_payable(env, payable_id);
+    release(env, payable.amount);
+
+    events::PayableExpired {
+        payable_id: payable_id.clone(),
+        expiry: payable.expiry,
+    }
+    .publish(env);
 }
 
 /// True when the contract itself holds the float, which is the only case where

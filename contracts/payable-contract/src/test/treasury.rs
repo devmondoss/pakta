@@ -1,7 +1,7 @@
 use super::{Harness, MAX_PER_PAYABLE, ONE_USDC, VAULT_FUNDING};
 use crate::types::{Error, Status};
 use soroban_sdk::testutils::{Address as _, Ledger as _};
-use soroban_sdk::{symbol_short, Address};
+use soroban_sdk::Address;
 
 /// Treasury safety: the vault may never hand back money it has already
 /// promised, and the float may never be trapped either.
@@ -134,8 +134,11 @@ mod the_mandatory_cases {
         let id = h.register(&proposal);
         assert_eq!(h.client.get_available(), VAULT_FUNDING - 100_000 * ONE_USDC);
 
-        h.client
-            .revoke_payable(&id, &symbol_short!("WALLET"), &h.sign_revocation(&proposal));
+        h.client.revoke_payable(
+            &id,
+            &h.reason("WALLET"),
+            &h.sign_revocation(&proposal, "WALLET"),
+        );
 
         assert_eq!(h.client.get_committed(), 0);
         assert_eq!(

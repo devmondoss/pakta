@@ -2,14 +2,20 @@ import { describe, expect, it } from "vitest";
 import {
   DOMAIN_SEPARATOR,
   REGISTRATION_PREIMAGE_BYTES,
+  ATTESTATION_PHASE_SYMBOL,
+  ATTESTATION_PREIMAGE_BYTES,
+  ATTEST_DOMAIN_SEPARATOR,
   REVOCATION_PREIMAGE_BYTES,
   REVOKE_DOMAIN_SEPARATOR,
   RegistrationDigestError,
   isoToUnixSeconds,
   registrationDigestHex,
   registrationPreimage,
+  attestationDigestHex,
+  attestationPreimage,
   revocationDigestHex,
   revocationPreimage,
+  type AttestationInput,
   type RegistrationInput,
   type RevocationInput,
 } from "../src/registrationDigest.js";
@@ -168,27 +174,26 @@ describe("isoToUnixSeconds", () => {
   });
 });
 
-describe("the revocation digest vector", () => {
+describe("the revocation digest vector (V2)", () => {
   const REVOCATION: RevocationInput = {
     networkPassphrase: INPUT.networkPassphrase,
     contractId: INPUT.contractId,
     payableId: INPUT.payableId,
     proofHash: INPUT.proofHash,
+    reasonCode: "VENDOR_WALLET_CHANGED",
   };
 
   const EXPECTED_REVOCATION_DIGEST =
-    "cf4f85ed03a7d850a9196a9f08433879d6af0b6e5e71155ae32427bb5e143f9e";
+    "795f6762ec74115526849f4d61ff677148e8fc9fe8161990e71917613a15c387";
 
-  it("builds a 141-byte preimage and hashes to the pinned digest", () => {
+  it("builds a 173-byte preimage and hashes to the pinned digest", () => {
     expect(revocationPreimage(REVOCATION)).toHaveLength(REVOCATION_PREIMAGE_BYTES);
     expect(revocationDigestHex(REVOCATION)).toBe(EXPECTED_REVOCATION_DIGEST);
   });
 
-  it("uses its own domain, so a registration signature cannot cancel a payment", () => {
+  it("uses its own V2 domain, so neither a registration nor a V1 revocation signature fits", () => {
     const preimage = revocationPreimage(REVOCATION);
-    expect(Buffer.from(preimage.subarray(0, 12)).toString("ascii")).toBe(
-      REVOKE_DOMAIN_SEPARATOR,
-    );
+    expect(Buffer.from(preimage.subarray(0, 12)).toString("ascii")).toBe("PAKTA_REV_V2");
     expect(REVOKE_DOMAIN_SEPARATOR).not.toBe(DOMAIN_SEPARATOR);
     expect(revocationDigestHex(REVOCATION)).not.toBe(EXPECTED_DIGEST);
   });
@@ -198,9 +203,56 @@ describe("the revocation digest vector", () => {
     ["the gate contract", { contractId: "CAMYM3CR6YM6Y3PUI7NMBJJ3SHWUKDFPRC4C722OOXZG3ZUUFW3ROF5P" }],
     ["the payable id", { payableId: "PAY-2026-9183" }],
     ["the proof hash", { proofHash: `${"0".repeat(63)}1` }],
+    // New in V2: the reason is signed, so it cannot be rewritten by whoever submits.
+    ["the reason", { reasonCode: "STALE_EVIDENCE" }],
   ])("changing %s invalidates the revocation digest", (_label, override) => {
-    expect(revocationDigestHex({ ...REVOCATION, ...override })).not.toBe(
-      EXPECTED_REVOCATION_DIGEST,
-    );
+    expect(revocationDigestHex({ ...REVOCATION, ...override })).not.toBe(EXPECTED_REVOCATION_DIGEST);
+  });
+});
+
+describe("the attestation digest vector", () => {
+  const ATTESTATION: AttestationInput = {
+    networkPassphrase: INPUT.networkPassphrase,
+    contractId: INPUT.contractId,
+    payableId: INPUT.payableId,
+    phase: "blocked",
+    reasonCode: "VENDOR_WALLET_CHANGED",
+    sequence: 1,
+  };
+
+  const EXPECTED_ATTESTATION_DIGEST =
+    "7dea7c29a2950c5cf6e2748f9ba149a5522a979ea5dfd788db8902440da71fe9";
+
+  it("builds a 150-byte preimage and hashes to the pinned digest", () => {
+    expect(attestationPreimage(ATTESTATION)).toHaveLength(ATTESTATION_PREIMAGE_BYTES);
+    expect(attestationDigestHex(ATTESTATION)).toBe(EXPECTED_ATTESTATION_DIGEST);
+  });
+
+  it("puts the phase code and sequence where the contract reads them", () => {
+    const preimage = attestationPreimage(ATTESTATION);
+    expect(Buffer.from(preimage.subarray(0, 12)).toString("ascii")).toBe(ATTEST_DOMAIN_SEPARATOR);
+    expect(preimage[109]).toBe(0); // blocked
+    expect(Buffer.from(preimage.subarray(142, 150)).toString("hex")).toBe("0000000000000001");
+  });
+
+  it.each([
+    ["the phase", { phase: "resolved" as const }],
+    ["the reason", { reasonCode: "MISSING_RECEIPT" }],
+    ["the sequence", { sequence: 2 }],
+    ["the payable id", { payableId: "PAY-2026-9183" }],
+    ["the gate contract", { contractId: "CAMYM3CR6YM6Y3PUI7NMBJJ3SHWUKDFPRC4C722OOXZG3ZUUFW3ROF5P" }],
+  ])("changing %s invalidates the attestation digest", (_label, override) => {
+    expect(attestationDigestHex({ ...ATTESTATION, ...override })).not.toBe(EXPECTED_ATTESTATION_DIGEST);
+  });
+
+  it("maps phases to the symbols attest_lifecycle expects on-chain", () => {
+    expect(ATTESTATION_PHASE_SYMBOL.reconciled).toBe("reconcil");
+    expect(Object.values(ATTESTATION_PHASE_SYMBOL).every((symbol) => symbol.length <= 9)).toBe(true);
+  });
+
+  it("rejects an unknown phase rather than hashing a guess", () => {
+    expect(() =>
+      attestationPreimage({ ...ATTESTATION, phase: "settled" as unknown as AttestationInput["phase"] }),
+    ).toThrow(RegistrationDigestError);
   });
 });

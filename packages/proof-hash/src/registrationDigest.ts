@@ -209,55 +209,69 @@ export function registrationDigestHex(input: RegistrationInput): string {
  *
  * A distinct domain separator is the point: without it the signature that
  * authorized a payment would also authorize cancelling it. `proofHash` binds
- * the revocation to the exact registration it cancels, so it cannot be moved
- * to a different payable.
+ * the revocation to the exact registration it cancels.
+ *
+ * V2 signs the reason as well. In V1 it was outside the digest, so whoever
+ * submitted the transaction could write any reason into the on-chain event.
+ * The domain tag changed with the layout so a V1 signature can never be read
+ * as V2.
  *
  * ```text
- * domain           13  ASCII "PAKTA_REV_V1" + 0x00
+ * domain           13  ASCII "PAKTA_REV_V2" + 0x00
  * network_id       32
  * contract_id      32
  * payable_id_hash  32
  * proof_hash       32
+ * reason_hash      32  SHA-256 of the reason code as UTF-8
  *                 ---
- *                 141
+ *                 173
  * ```
  */
-export const REVOKE_DOMAIN_SEPARATOR = "PAKTA_REV_V1";
-export const REVOCATION_PREIMAGE_BYTES = 141;
+export const REVOKE_DOMAIN_SEPARATOR = "PAKTA_REV_V2";
+export const REVOCATION_PREIMAGE_BYTES = 173;
 
 export type RevocationInput = {
   networkPassphrase: string;
   contractId: string;
   payableId: string;
   proofHash: string;
+  /** e.g. "VENDOR_WALLET_CHANGED". Signed, and emitted verbatim in the event. */
+  reasonCode: string;
 };
 
-export function revocationPreimage(input: RevocationInput): Uint8Array {
+function domainBytes(separator: string): Uint8Array {
   const domain = new Uint8Array(13);
-  domain.set(new TextEncoder().encode(REVOKE_DOMAIN_SEPARATOR));
+  domain.set(new TextEncoder().encode(separator));
+  return domain;
+}
 
-  const parts: Uint8Array[] = [
-    domain,
-    sha256Bytes(requireNonEmptyString(input.networkPassphrase, "networkPassphrase")),
-    decodeContractId(requireNonEmptyString(input.contractId, "contractId")),
-    sha256Bytes(requireNonEmptyString(input.payableId, "payableId")),
-    hexToBytes(requireNonEmptyString(input.proofHash, "proofHash"), "proofHash"),
-  ];
-
+function concatExact(parts: Uint8Array[], expected: number, label: string): Uint8Array {
   const total = parts.reduce((sum, part) => sum + part.length, 0);
-  if (total !== REVOCATION_PREIMAGE_BYTES) {
-    throw new RegistrationDigestError(
-      `revocation preimage is ${total} bytes, expected ${REVOCATION_PREIMAGE_BYTES}`,
-    );
+  if (total !== expected) {
+    throw new RegistrationDigestError(`${label} preimage is ${total} bytes, expected ${expected}`);
   }
-
-  const preimage = new Uint8Array(total);
+  const out = new Uint8Array(total);
   let offset = 0;
   for (const part of parts) {
-    preimage.set(part, offset);
+    out.set(part, offset);
     offset += part.length;
   }
-  return preimage;
+  return out;
+}
+
+export function revocationPreimage(input: RevocationInput): Uint8Array {
+  return concatExact(
+    [
+      domainBytes(REVOKE_DOMAIN_SEPARATOR),
+      sha256Bytes(requireNonEmptyString(input.networkPassphrase, "networkPassphrase")),
+      decodeContractId(requireNonEmptyString(input.contractId, "contractId")),
+      sha256Bytes(requireNonEmptyString(input.payableId, "payableId")),
+      hexToBytes(requireNonEmptyString(input.proofHash, "proofHash"), "proofHash"),
+      sha256Bytes(requireNonEmptyString(input.reasonCode, "reasonCode")),
+    ],
+    REVOCATION_PREIMAGE_BYTES,
+    "revocation",
+  );
 }
 
 export function revocationDigest(input: RevocationInput): Uint8Array {
@@ -266,4 +280,78 @@ export function revocationDigest(input: RevocationInput): Uint8Array {
 
 export function revocationDigestHex(input: RevocationInput): string {
   return Buffer.from(revocationDigest(input)).toString("hex");
+}
+
+/**
+ * A lifecycle attestation: the issuer telling the ledger that an exception was
+ * raised, resolved, or reconciled.
+ *
+ * It cannot be bound to a `proofHash` the way revocation is — the payables it
+ * describes are mostly BLOCKED, and only READY payables are ever registered
+ * on-chain — so it binds to the payable id and a `sequence` the issuer chooses.
+ * The contract stores nothing for it, so a replay only re-emits an identical
+ * event; consumers deduplicate on `(payableId, phase, sequence)`.
+ *
+ * ```text
+ * domain           13  ASCII "PAKTA_ATT_V1" + 0x00
+ * network_id       32
+ * contract_id      32
+ * payable_id_hash  32
+ * phase             1  0 = blocked, 1 = resolved, 2 = reconciled
+ * reason_hash      32  SHA-256 of the reason code as UTF-8
+ * sequence          8  u64, big endian
+ *                 ---
+ *                 150
+ * ```
+ *
+ * On-chain the phase is passed as a Soroban symbol: "blocked", "resolved", or
+ * "reconcil" (symbols of this kind are limited to 9 characters).
+ */
+export const ATTEST_DOMAIN_SEPARATOR = "PAKTA_ATT_V1";
+export const ATTESTATION_PREIMAGE_BYTES = 150;
+
+export const ATTESTATION_PHASES = { blocked: 0, resolved: 1, reconciled: 2 } as const;
+export type AttestationPhase = keyof typeof ATTESTATION_PHASES;
+
+/** The symbol `attest_lifecycle` expects for each phase. */
+export const ATTESTATION_PHASE_SYMBOL: Record<AttestationPhase, string> = {
+  blocked: "blocked",
+  resolved: "resolved",
+  reconciled: "reconcil",
+};
+
+export type AttestationInput = {
+  networkPassphrase: string;
+  contractId: string;
+  payableId: string;
+  phase: AttestationPhase;
+  reasonCode: string;
+  sequence: number | bigint;
+};
+
+export function attestationPreimage(input: AttestationInput): Uint8Array {
+  if (!(input.phase in ATTESTATION_PHASES)) {
+    throw new RegistrationDigestError(`unknown attestation phase: ${String(input.phase)}`);
+  }
+  return concatExact(
+    [
+      domainBytes(ATTEST_DOMAIN_SEPARATOR),
+      sha256Bytes(requireNonEmptyString(input.networkPassphrase, "networkPassphrase")),
+      decodeContractId(requireNonEmptyString(input.contractId, "contractId")),
+      sha256Bytes(requireNonEmptyString(input.payableId, "payableId")),
+      new Uint8Array([ATTESTATION_PHASES[input.phase]]),
+      sha256Bytes(requireNonEmptyString(input.reasonCode, "reasonCode")),
+      u64BigEndian(input.sequence, "sequence"),
+    ],
+    ATTESTATION_PREIMAGE_BYTES,
+    "attestation",
+  );
+}
+
+export function attestationDigest(input: AttestationInput): Uint8Array {
+  return sha256Bytes(attestationPreimage(input));
+}
+
+export function attestationDigestHex(input: AttestationInput): string {
+  return Buffer.from(attestationDigest(input)).toString("hex");
 }

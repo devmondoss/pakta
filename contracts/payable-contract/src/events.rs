@@ -1,4 +1,4 @@
-use soroban_sdk::{contractevent, Address, BytesN, Symbol};
+use soroban_sdk::{contractevent, Address, BytesN, String};
 
 /// The six events of `Pakta_Documento_Maestro.md` §8.5, plus the two terminal
 /// transitions the gate reaches on its own.
@@ -57,7 +57,8 @@ pub struct PayableExpired {
 pub struct PayableRevoked {
     #[topic]
     pub payable_id: BytesN<32>,
-    pub reason_code: Symbol,
+    /// Covered by the issuer's signature since revocation V2.
+    pub reason_code: String,
 }
 
 #[contractevent]
@@ -65,7 +66,9 @@ pub struct PayableRevoked {
 pub struct PayableBlocked {
     #[topic]
     pub payable_id: BytesN<32>,
-    pub reason_code: Symbol,
+    pub reason_code: String,
+    /// Chosen by the issuer; the indexer deduplicates on (payable_id, phase, sequence).
+    pub sequence: u64,
 }
 
 #[contractevent]
@@ -73,7 +76,9 @@ pub struct PayableBlocked {
 pub struct ExceptionResolved {
     #[topic]
     pub payable_id: BytesN<32>,
-    pub reason_code: Symbol,
+    pub reason_code: String,
+    /// Chosen by the issuer; the indexer deduplicates on (payable_id, phase, sequence).
+    pub sequence: u64,
 }
 
 #[contractevent]
@@ -81,7 +86,9 @@ pub struct ExceptionResolved {
 pub struct PayableReconciled {
     #[topic]
     pub payable_id: BytesN<32>,
-    pub reason_code: Symbol,
+    pub reason_code: String,
+    /// Chosen by the issuer; the indexer deduplicates on (payable_id, phase, sequence).
+    pub sequence: u64,
 }
 
 #[contractevent]
@@ -90,4 +97,24 @@ pub struct VaultWithdrawn {
     #[topic]
     pub treasury: Address,
     pub amount: i128,
+}
+
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContractUpgraded {
+    pub new_wasm_hash: BytesN<32>,
+}
+
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AdminChanged {
+    #[topic]
+    pub new_admin: Address,
+}
+
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TreasuryChanged {
+    #[topic]
+    pub new_treasury: Address,
 }

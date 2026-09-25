@@ -1,6 +1,6 @@
 import { createPrivateKey, createPublicKey, sign as ed25519Sign, verify as ed25519Verify } from "node:crypto";
 import { SignedProofOfPayable, type ProofOfPayable } from "@pakta/canonical-model";
-import { revocationDigestHex } from "@pakta/proof-hash";
+import { attestationDigestHex, revocationDigestHex, type AttestationPhase } from "@pakta/proof-hash";
 import { decodeAccountId, decodeSecretSeed, encodeAccountId } from "@pakta/stellar-sdk-wrapper";
 import type { Deployment } from "./deployment.js";
 import { prepareRegistration, type PreparedRegistration } from "./registration.js";
@@ -72,14 +72,43 @@ export class Issuer {
     return { signed, prepared };
   }
 
-  /** Signs the cancellation of a payable this issuer already authorized. */
-  signRevocation(payableId: string, proofHashHex: string, deployment: Deployment): Uint8Array {
+  /**
+   * Signs the cancellation of a payable this issuer already authorized. The
+   * reason is part of what is signed, so the on-chain event carries the
+   * justification the issuer gave rather than whatever the submitter typed.
+   */
+  signRevocation(payableId: string, proofHashHex: string, reasonCode: string, deployment: Deployment): Uint8Array {
     return this.signDigest(
       revocationDigestHex({
         networkPassphrase: deployment.networkPassphrase,
         contractId: deployment.contractId,
         payableId,
         proofHash: proofHashHex,
+        reasonCode,
+      }),
+    );
+  }
+
+  /**
+   * Signs a lifecycle attestation — an exception raised, resolved or
+   * reconciled. Works for BLOCKED payables that were never registered, which is
+   * the common case. Consumers deduplicate on (payableId, phase, sequence).
+   */
+  signAttestation(
+    payableId: string,
+    phase: AttestationPhase,
+    reasonCode: string,
+    sequence: number | bigint,
+    deployment: Deployment,
+  ): Uint8Array {
+    return this.signDigest(
+      attestationDigestHex({
+        networkPassphrase: deployment.networkPassphrase,
+        contractId: deployment.contractId,
+        payableId,
+        phase,
+        reasonCode,
+        sequence,
       }),
     );
   }

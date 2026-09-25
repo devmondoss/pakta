@@ -1,14 +1,19 @@
 extern crate std;
 
 mod admin;
+mod attest;
 mod digest;
 mod integration;
 mod register;
 mod revoke;
 mod settle;
 mod treasury;
+mod v4;
 
-use crate::digest::{registration_digest, revocation_digest, RegistrationFields, RevocationFields};
+use crate::digest::{
+    attestation_digest, reason_hash, registration_digest, revocation_digest, AttestationFields,
+    RegistrationFields, RevocationFields,
+};
 use crate::types::IssuerSignature;
 use crate::{PayableContract, PayableContractClient};
 use ed25519_dalek::{Signer, SigningKey};
@@ -196,7 +201,7 @@ impl Harness {
     /// Signs a revocation for an already-registered payable, the way the
     /// off-chain issuer would. A separate domain from registration, so a
     /// registration signature cannot be replayed here.
-    pub fn sign_revocation(&self, proposal: &Proposal) -> Vec<IssuerSignature> {
+    pub fn sign_revocation(&self, proposal: &Proposal, reason: &str) -> Vec<IssuerSignature> {
         let digest = revocation_digest(
             &self.env,
             &RevocationFields {
@@ -204,6 +209,36 @@ impl Harness {
                 contract_id: crate::address_bytes::address_to_bytes(&self.env, &self.contract_id),
                 payable_id_hash: proposal.payable_id.clone(),
                 proof_hash: proposal.proof_hash.clone(),
+                reason_hash: reason_hash(&self.env, &self.reason(reason)),
+            },
+        );
+        self.sign_digest(&digest, &self.issuer_key, &self.issuer_pub)
+    }
+
+    /// Reason codes travel as strings so they can be hashed into the signed
+    /// digest; the event then carries exactly what the issuer signed.
+    pub fn reason(&self, code: &str) -> soroban_sdk::String {
+        soroban_sdk::String::from_str(&self.env, code)
+    }
+
+    /// Signs a lifecycle attestation. `phase` is 0 blocked, 1 resolved,
+    /// 2 reconciled — the byte the contract derives from the phase symbol.
+    pub fn sign_attestation(
+        &self,
+        payable_id: &BytesN<32>,
+        phase: u8,
+        reason: &str,
+        sequence: u64,
+    ) -> Vec<IssuerSignature> {
+        let digest = attestation_digest(
+            &self.env,
+            &AttestationFields {
+                network_id: self.network_id.clone(),
+                contract_id: crate::address_bytes::address_to_bytes(&self.env, &self.contract_id),
+                payable_id_hash: payable_id.clone(),
+                phase,
+                reason_hash: reason_hash(&self.env, &self.reason(reason)),
+                sequence,
             },
         );
         self.sign_digest(&digest, &self.issuer_key, &self.issuer_pub)
@@ -293,5 +328,5 @@ pub struct Proposal {
 #[test]
 fn contract_version_is_exposed() {
     let harness = Harness::vault();
-    assert_eq!(harness.client.contract_version(), 3);
+    assert_eq!(harness.client.contract_version(), 4);
 }

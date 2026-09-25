@@ -1,7 +1,7 @@
 use super::{Harness, ONE_USDC};
 use crate::types::{Error, IssuerSignature, Status};
 use ed25519_dalek::SigningKey;
-use soroban_sdk::{symbol_short, BytesN, Vec};
+use soroban_sdk::{BytesN, Vec};
 
 /// Revocation is authorized the way registration is — by an issuer signature
 /// over a digest the contract recomputes — because the issuer is an Ed25519
@@ -13,8 +13,11 @@ fn a_correctly_signed_revocation_blocks_the_payment() {
     let proposal = h.proposal(1, 5_000 * ONE_USDC);
     let id = h.register(&proposal);
 
-    h.client
-        .revoke_payable(&id, &symbol_short!("WALLET"), &h.sign_revocation(&proposal));
+    h.client.revoke_payable(
+        &id,
+        &h.reason("WALLET"),
+        &h.sign_revocation(&proposal, "WALLET"),
+    );
 
     assert_eq!(h.client.get_payable(&id).unwrap().status, Status::Revoked);
     assert_eq!(h.client.try_settle(&id), Err(Ok(Error::NotReady)));
@@ -29,11 +32,11 @@ fn revocation_needs_no_admin_and_no_account_at_all() {
     let h = Harness::vault();
     let proposal = h.proposal(2, 5_000 * ONE_USDC);
     let id = h.register(&proposal);
-    let signatures = h.sign_revocation(&proposal);
+    let signatures = h.sign_revocation(&proposal, "STALE");
 
     h.env.set_auths(&[]);
     h.client
-        .revoke_payable(&id, &symbol_short!("STALE"), &signatures);
+        .revoke_payable(&id, &h.reason("STALE"), &signatures);
 
     assert_eq!(h.client.get_payable(&id).unwrap().status, Status::Revoked);
 }
@@ -52,8 +55,7 @@ fn a_forged_revocation_signature_is_rejected() {
             signature: BytesN::from_array(&h.env, &[0u8; 64]),
         }],
     );
-    h.client
-        .revoke_payable(&id, &symbol_short!("WALLET"), &forged);
+    h.client.revoke_payable(&id, &h.reason("WALLET"), &forged);
 }
 
 #[test]
@@ -71,13 +73,14 @@ fn a_revocation_signed_by_an_unauthorized_issuer_is_rejected() {
             contract_id: crate::address_bytes::address_to_bytes(&h.env, &h.contract_id),
             payable_id_hash: proposal.payable_id.clone(),
             proof_hash: proposal.proof_hash.clone(),
+            reason_hash: crate::digest::reason_hash(&h.env, &h.reason("WALLET")),
         },
     );
     let signatures = h.sign_digest(&digest, &rogue, &rogue_pub);
 
     assert_eq!(
         h.client
-            .try_revoke_payable(&id, &symbol_short!("WALLET"), &signatures),
+            .try_revoke_payable(&id, &h.reason("WALLET"), &signatures),
         Err(Ok(Error::UnknownIssuer))
     );
     assert_eq!(h.client.get_payable(&id).unwrap().status, Status::Ready);
@@ -94,7 +97,7 @@ fn a_registration_signature_cannot_be_replayed_as_a_revocation() {
     let id = h.register(&proposal);
 
     h.client
-        .revoke_payable(&id, &symbol_short!("WALLET"), &h.sign(&proposal));
+        .revoke_payable(&id, &h.reason("WALLET"), &h.sign(&proposal));
 }
 
 #[test]
@@ -108,8 +111,11 @@ fn a_revocation_signed_for_another_payable_is_rejected() {
 
     // Valid signature, wrong payable — proof_hash and payable_id are both in
     // the digest, so it does not carry across.
-    h.client
-        .revoke_payable(&id, &symbol_short!("WALLET"), &h.sign_revocation(&other));
+    h.client.revoke_payable(
+        &id,
+        &h.reason("WALLET"),
+        &h.sign_revocation(&other, "WALLET"),
+    );
 }
 
 #[test]
@@ -120,7 +126,7 @@ fn an_empty_signature_set_does_not_meet_the_threshold() {
 
     assert_eq!(
         h.client
-            .try_revoke_payable(&id, &symbol_short!("WALLET"), &Vec::new(&h.env)),
+            .try_revoke_payable(&id, &h.reason("WALLET"), &Vec::new(&h.env)),
         Err(Ok(Error::ThresholdNotMet))
     );
     assert_eq!(h.client.get_payable(&id).unwrap().status, Status::Ready);
@@ -135,8 +141,8 @@ fn an_unknown_payable_cannot_be_revoked() {
     assert_eq!(
         h.client.try_revoke_payable(
             &ghost,
-            &symbol_short!("WALLET"),
-            &h.sign_revocation(&proposal)
+            &h.reason("WALLET"),
+            &h.sign_revocation(&proposal, "WALLET")
         ),
         Err(Ok(Error::PayableNotFound))
     );
@@ -147,7 +153,7 @@ fn rotating_the_issuer_set_invalidates_pending_revocation_authority() {
     let h = Harness::vault();
     let proposal = h.proposal(10, 5_000 * ONE_USDC);
     let id = h.register(&proposal);
-    let signed_by_old_issuer = h.sign_revocation(&proposal);
+    let signed_by_old_issuer = h.sign_revocation(&proposal, "WALLET");
 
     let replacement = SigningKey::from_bytes(&[12u8; 32]);
     let replacement_pub = BytesN::from_array(&h.env, &replacement.verifying_key().to_bytes());
@@ -156,7 +162,36 @@ fn rotating_the_issuer_set_invalidates_pending_revocation_authority() {
 
     assert_eq!(
         h.client
-            .try_revoke_payable(&id, &symbol_short!("WALLET"), &signed_by_old_issuer),
+            .try_revoke_payable(&id, &h.reason("WALLET"), &signed_by_old_issuer),
         Err(Ok(Error::UnknownIssuer))
     );
+}
+
+#[test]
+#[should_panic]
+fn a_revocation_cannot_be_relabelled_by_whoever_submits_it() {
+    // V1 left the reason outside the digest, so a relayer could submit a
+    // genuine revocation under a misleading reason and the indexer would record
+    // it. V2 signs the reason: the same signature under a different one fails.
+    let h = Harness::vault();
+    let proposal = h.proposal(20, 5_000 * ONE_USDC);
+    let id = h.register(&proposal);
+    let signed_for_wallet = h.sign_revocation(&proposal, "VENDOR_WALLET_CHANGED");
+
+    h.client
+        .revoke_payable(&id, &h.reason("DUPLICATE_INVOICE"), &signed_for_wallet);
+}
+
+#[test]
+fn the_revocation_event_carries_exactly_the_signed_reason() {
+    let h = Harness::vault();
+    let proposal = h.proposal(21, 5_000 * ONE_USDC);
+    let id = h.register(&proposal);
+
+    h.client.revoke_payable(
+        &id,
+        &h.reason("VENDOR_WALLET_CHANGED"),
+        &h.sign_revocation(&proposal, "VENDOR_WALLET_CHANGED"),
+    );
+    assert_eq!(h.client.get_payable(&id).unwrap().status, Status::Revoked);
 }

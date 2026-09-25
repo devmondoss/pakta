@@ -1,6 +1,5 @@
 use super::{Harness, ONE_USDC, START_TIME, WINDOW_SECONDS};
 use crate::types::{Error, Status};
-use soroban_sdk::symbol_short;
 use soroban_sdk::testutils::Ledger as _;
 
 #[test]
@@ -83,8 +82,11 @@ fn a_revoked_payable_cannot_settle() {
     let proposal = h.proposal(6, 5_000 * ONE_USDC);
     let id = h.register(&proposal);
 
-    h.client
-        .revoke_payable(&id, &symbol_short!("WALLET"), &h.sign_revocation(&proposal));
+    h.client.revoke_payable(
+        &id,
+        &h.reason("WALLET"),
+        &h.sign_revocation(&proposal, "WALLET"),
+    );
     assert_eq!(h.client.get_payable(&id).unwrap().status, Status::Revoked);
 
     assert_eq!(h.client.try_settle(&id), Err(Ok(Error::NotReady)));
@@ -99,8 +101,11 @@ fn a_settled_payable_cannot_be_revoked_afterwards() {
     h.client.settle(&id);
 
     assert_eq!(
-        h.client
-            .try_revoke_payable(&id, &symbol_short!("WALLET"), &h.sign_revocation(&proposal)),
+        h.client.try_revoke_payable(
+            &id,
+            &h.reason("WALLET"),
+            &h.sign_revocation(&proposal, "WALLET")
+        ),
         Err(Ok(Error::NotReady))
     );
     assert_eq!(h.client.get_payable(&id).unwrap().status, Status::Settled);
@@ -111,14 +116,20 @@ fn revocation_is_idempotent_in_effect() {
     let h = Harness::vault();
     let proposal = h.proposal(8, 5_000 * ONE_USDC);
     let id = h.register(&proposal);
-    h.client
-        .revoke_payable(&id, &symbol_short!("WALLET"), &h.sign_revocation(&proposal));
+    h.client.revoke_payable(
+        &id,
+        &h.reason("WALLET"),
+        &h.sign_revocation(&proposal, "WALLET"),
+    );
 
     // A second revoke is refused rather than silently re-applied, and the
     // status is unchanged either way.
     assert_eq!(
-        h.client
-            .try_revoke_payable(&id, &symbol_short!("WALLET"), &h.sign_revocation(&proposal)),
+        h.client.try_revoke_payable(
+            &id,
+            &h.reason("WALLET"),
+            &h.sign_revocation(&proposal, "WALLET")
+        ),
         Err(Ok(Error::NotReady))
     );
     assert_eq!(h.client.get_payable(&id).unwrap().status, Status::Revoked);
