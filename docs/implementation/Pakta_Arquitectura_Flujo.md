@@ -17,6 +17,7 @@ Todo lo demás en `docs/` es un **complemento** de este archivo, no un documento
 | [Plan de implementación](Pakta_Plan_Implementacion.md) | El plan de ejecución por fases y el detalle de la arquitectura objetivo. |
 | [División de trabajo](Pakta_Division_Trabajo.md) | Historias de usuario, criterios de aceptación y DoD por comando para ambos devs. |
 | [Checklist de Dev 2](Pakta_Dev2_Checklist.md) | Bitácora de ingestion, extracción, API y dashboard. |
+| [Escenarios UX](Pakta_Escenarios_UX.md) | Los diagramas de este documento (§2, §4, §9) asumen siempre settlement en Stellar. Para el escenario sin crypto (área contable pura, settlement manual por banco) y el mapa de pantallas por rol de cada escenario, ver ese doc. |
 
 
 ---
@@ -95,6 +96,8 @@ flowchart LR
 
 
 > **La diferencia:** el payment rail responde "¿podemos mover el dinero?". Pakta responde **"¿esta obligación específica está realmente lista para pagarse, a este destinatario, por este monto, ahora?"** — antes de que el dinero se mueva, no después.
+
+> **Alcance de este diagrama:** el tramo `SET → SC → STL → IDX` es el **Escenario B** (settlement real en Stellar). Si la empresa no quiere/necesita crypto, ese tramo se sustituye por un cierre manual (Proof-of-Payable como certificado interno + pago por banco fuera de Pakta) — ver [Escenarios UX](Pakta_Escenarios_UX.md) §2.
 
 ---
 
@@ -520,6 +523,8 @@ sequenceDiagram
 ## 10. Flujo de usuario por actor
 
 No todos los "usuarios" de Pakta hacen lo mismo ni usan la misma pantalla. Esto mapea cada actor real (`Pakta_Documento_Maestro.md` §11) contra lo que ya existe: el `ownerRole` que produce el kernel (`packages/canonical-model/src/schemas.ts`) y el módulo del dashboard (`apps/web`) que le corresponde.
+
+> La tabla de abajo es el **Escenario B** (Vendor Master atestigua wallet Stellar, Treasury liquida on-chain). Para el mismo mapeo con settlement bancario tradicional (Vendor Master atestigua cuenta bancaria, Tesorería cierra manualmente) ver [Escenarios UX](Pakta_Escenarios_UX.md) §2.
 
 ### 10.1 Quién es quién
 
