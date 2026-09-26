@@ -106,7 +106,7 @@ export function ControlRoomFlow({
   // el slide solo (como si esa etapa estuviera corriendo de verdad), y
   // recién ahí aparece el overlay resumiendo qué pasó — nunca apenas se
   // entra, o los resúmenes salen todos pegados uno atrás del otro.
-  const WORK_MS = 2200;
+  const WORK_MS = 3400;
   const [viewIndex, setViewIndex] = useState(0);
   const [pinned, setPinned] = useState(false);
   const [working, setWorking] = useState(false);

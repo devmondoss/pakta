@@ -21,7 +21,7 @@ export async function postAction(path: string, body?: unknown, method: "POST" | 
         method,
         ...(body === undefined ? {} : { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
       }),
-      wait(900),
+      wait(1400),
     ]);
     if (res.ok) return true;
     const payload = await res.json().catch(() => ({}));

@@ -86,7 +86,7 @@ export function IntakeFlow({
 
     const revealSteps = (async () => {
       for (let i = 0; i < steps.length - 1; i++) {
-        await wait(1300);
+        await wait(1700);
         setStepIndex(i + 1);
       }
     })();
@@ -110,7 +110,7 @@ export function IntakeFlow({
         }),
       ]);
       setStepIndex(steps.length);
-      await wait(1000);
+      await wait(1300);
       setResult(outcome);
       setState("done");
       router.refresh();

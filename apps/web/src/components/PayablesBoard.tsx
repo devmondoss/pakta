@@ -10,7 +10,7 @@ import { postAction } from "@/lib/postAction";
 import { pushToast } from "@/lib/toast";
 import { blockedNarrative, reasonLabel } from "@/lib/reasoning";
 
-const AUTO_SETTLE_MS = 5000;
+const AUTO_SETTLE_MS = 7500;
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 

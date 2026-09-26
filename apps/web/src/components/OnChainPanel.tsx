@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ArrowUpRight, Link2 } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -56,50 +57,49 @@ export function OnChainPanel() {
 
   return (
     <div className="onchain-panel">
-      <p className="onchain-heading">Contrato en cadena</p>
-      <div className="onchain-grid">
-        <div className="onchain-row">
-          <span className="onchain-label">Red</span>
-          <span className="onchain-value">{health.network}</span>
-        </div>
-        <div className="onchain-row">
-          <span className="onchain-label">PayableGate</span>
-          <a
-            className="onchain-value onchain-link"
-            href={`${explorerBase(health.network)}/contract/${health.gate}`}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {truncateId(health.gate)} ↗
-          </a>
-        </div>
-        {vault ? (
-          <>
-            <div className="onchain-row">
-              <span className="onchain-label">Vault disponible</span>
-              <span className="onchain-value">
-                {vault.available} {vault.asset}
-              </span>
-            </div>
-            <div className="onchain-row">
-              <span className="onchain-label">Vault comprometido</span>
-              <span className="onchain-value">
-                {vault.committed} {vault.asset}
-              </span>
-            </div>
-            <div className="onchain-row">
-              <span className="onchain-label">Settlements totales</span>
-              <span className="onchain-value">{vault.settledCount}</span>
-            </div>
-          </>
-        ) : (
-          <p className="onchain-empty">
-            {health.settlement === "enabled"
-              ? "Cargando estado del vault…"
-              : "Settlement real no configurado — este es el contrato desplegado, sin fondos moviéndose todavía."}
-          </p>
-        )}
+      <div className="onchain-panel-head">
+        <Link2 size={13} strokeWidth={2.4} className="onchain-panel-icon" />
+        <p className="onchain-heading">Contrato en cadena</p>
+        <span className="onchain-network-badge">{health.network}</span>
       </div>
+
+      <a
+        className="onchain-gate-link"
+        href={`${explorerBase(health.network)}/contract/${health.gate}`}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        <span className="onchain-label">PayableGate</span>
+        <span className="onchain-gate-id">{truncateId(health.gate)}</span>
+        <ArrowUpRight size={13} strokeWidth={2.4} className="onchain-gate-arrow" />
+      </a>
+
+      {vault ? (
+        <div className="onchain-stats">
+          <div className="onchain-stat onchain-stat-highlight">
+            <span className="onchain-stat-label">Vault disponible</span>
+            <span className="onchain-stat-value onchain-stat-value-available">
+              {vault.available} <span className="onchain-stat-asset">{vault.asset}</span>
+            </span>
+          </div>
+          <div className="onchain-stat">
+            <span className="onchain-stat-label">Vault comprometido</span>
+            <span className="onchain-stat-value">
+              {vault.committed} <span className="onchain-stat-asset">{vault.asset}</span>
+            </span>
+          </div>
+          <div className="onchain-stat onchain-stat-compact">
+            <span className="onchain-stat-label">Settlements</span>
+            <span className="onchain-stat-value">{vault.settledCount}</span>
+          </div>
+        </div>
+      ) : (
+        <p className="onchain-empty">
+          {health.settlement === "enabled"
+            ? "Cargando estado del vault…"
+            : "Settlement real no configurado — este es el contrato desplegado, sin fondos moviéndose todavía."}
+        </p>
+      )}
     </div>
   );
 }
