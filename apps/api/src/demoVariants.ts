@@ -5,77 +5,144 @@ import ExcelJS from "exceljs";
 const fixturesDir = path.resolve(import.meta.dirname, "../../../fixtures/demo-workbook");
 const baseData = JSON.parse(readFileSync(path.join(fixturesDir, "demo-data.json"), "utf-8"));
 
-export type DemoVariant = { label: string; vendorNames: [string, string, string, string, string] };
+export type DemoVariant = {
+  label: string;
+  vendorNames: [string, string, string, string, string];
+  /** Pool this sector can draw extra (always-clean) vendors from — up to 5, for a 5-10 invoice range per run. */
+  extraVendorPool: string[];
+};
+
+type ExtraInvoice = {
+  vendorId: string;
+  legalName: string;
+  walletAddress: string;
+  poId: string;
+  invoiceId: string;
+  amount: string;
+};
+
+/** What `pickVariant` hands back: the base variant plus the extra invoices it randomly drew for this run. */
+export type ResolvedDemoVariant = DemoVariant & { extraInvoices: ExtraInvoice[] };
 
 /**
- * 10 sets of fictional vendor names for "Usar datos de ejemplo" — every
- * other field (amounts, PO/receipt/wallet relationships, the known
- * duplicate fingerprint) stays exactly what `demo-data.json` already has.
+ * 5 sets of fictional vendor names for "Usar datos de ejemplo" — the base
+ * 5 invoices (amounts, PO/receipt/wallet relationships, the known
+ * duplicate fingerprint) stay exactly what `demo-data.json` already has.
  * That's deliberate: those numbers are what makes INV-001..005 land on
  * the exact canonical outcome (§17.3/§25 del maestro) — 1 READY + 4
- * BLOCKED with the right reason codes. Varying only the company names
- * gives real visual variety on every load without any risk of silently
- * breaking DUPLICATE_INVOICE / PO_AMOUNT_MISMATCH / VENDOR_WALLET_CHANGED
- * / MISSING_RECEIPT.
+ * BLOCKED, one payable per exception type. `pickVariant` tops that up
+ * with 0-5 extra invoices drawn from `extraVendorPool` (see
+ * `buildExtraInvoice` below) so every run shows a different number of
+ * companies (5-10) instead of the exact same 5 every time, without
+ * risking a synthetic invoice that accidentally breaks one of the 4
+ * exception rules.
  */
 export const DEMO_VARIANTS: DemoVariant[] = [
   {
     label: "Cloud & logística",
     vendorNames: ["CloudData Inc.", "Northline Supplies", "Meridian Logistics", "Arclight Components", "Harborview Services"],
-  },
-  {
-    label: "Manufactura textil",
-    vendorNames: ["Telar del Sur S.A.", "Hilanderías Vintex", "Confecciones Roble", "Distribuidora Andina", "Textiles Cumbre"],
+    extraVendorPool: ["Latticework Hosting", "Pinecrest Freight", "Vantage Colo", "Ironhaul Transport", "Skyline Data Centers"],
   },
   {
     label: "Agroindustria",
     vendorNames: ["AgroPacífico Ltda.", "Semillas del Valle", "Exportadora Cafetal", "Fertilizantes Norte", "Cosecha Real"],
+    extraVendorPool: ["Molinos del Sur", "Vivero Altamira", "Empaques Agroluz", "Riegos Cordillera", "Silos del Llano"],
   },
   {
     label: "Construcción",
     vendorNames: ["Cementos Altiplano", "Aceros del Puerto", "Maderera San Rafael", "Instalaciones Vertex", "Concreto Total"],
-  },
-  {
-    label: "Retail y consumo",
-    vendorNames: ["Almacenes Rioclaro", "Distribuciones Kori", "Bodegas del Istmo", "Comercial Zafiro", "Mayorista Andes"],
+    extraVendorPool: ["Andamios Nortec", "Vidrios Marbella", "Eléctricos del Cauca", "Pinturas Cimarrón", "Grúas Peñalisa"],
   },
   {
     label: "Salud",
     vendorNames: ["Insumos Médicos Vitalia", "Farmacéutica Andesalud", "Laboratorios Bioquim", "Equipos Clínicos Norsan", "Distribuidora Sanare"],
-  },
-  {
-    label: "Energía",
-    vendorNames: ["Energía Solar del Pacífico", "Turbinas Meridiano", "Redes Eléctricas Boreal", "Combustibles Delta", "Grid Servicios"],
-  },
-  {
-    label: "Transporte",
-    vendorNames: ["Fletes Cordillera", "Naviera Austral", "Transportes Rauco", "Aerocarga Kuntur", "Logística Puelche"],
+    extraVendorPool: ["Suministros Cruz Azul", "Diagnóstica Prisma", "Ortopédicos Alameda", "Biotecnología Alterra", "Insumos Nortemed"],
   },
   {
     label: "Tecnología",
     vendorNames: ["Nimbus Data Systems", "Redshift Analytics", "Vector Cloud Co.", "Quanta Infra", "Latencia Cero SpA"],
-  },
-  {
-    label: "Servicios profesionales",
-    vendorNames: ["Consultora Prisma", "Estudio Legal Marín", "Auditores del Río", "Ingeniería Cardinal", "Contable Meridiano"],
+    extraVendorPool: ["Cipher Security Labs", "Parallax Devtools", "Northbeam Analytics", "Monolith Storage", "Edge Relay Systems"],
   },
 ];
 
-/** `index` viene de la elección explícita del usuario en el picker; sin él, se sortea. */
-export function pickVariant(index?: number): DemoVariant {
-  if (index !== undefined) {
-    const variant = DEMO_VARIANTS[index];
-    if (!variant) throw new Error(`no demo variant at index ${index}`);
-    return variant;
-  }
-  return DEMO_VARIANTS[Math.floor(Math.random() * DEMO_VARIANTS.length)];
+function randomAmount(): string {
+  // Bajo el umbral de la segunda aprobación (5000.00) a propósito: estos
+  // extras son siempre READY, y por encima de ese umbral exigirían una
+  // segunda aprobación que no tienen — mejor no acercarse al borde.
+  return (800 + Math.random() * 4000).toFixed(2);
 }
 
-function withVendorNames(variant: DemoVariant) {
+function shuffledSample<T>(items: T[], count: number): T[] {
+  const copy = [...items];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy.slice(0, count);
+}
+
+/**
+ * Genera una invoice extra siempre "limpia" — vendor nuevo, PO/wallet/
+ * receipt/aprobación que calzan exacto, sin fingerprint repetido — así el
+ * batch siempre puede tener entre 5 y 10 invoices sin arriesgar que una de
+ * las 4 excepciones documentadas se rompa o se duplique por accidente.
+ */
+function buildExtraInvoice(legalName: string, seq: number): ExtraInvoice {
+  return {
+    vendorId: `VEN-1${String(seq).padStart(2, "0")}`,
+    legalName,
+    walletAddress: `GX${seq}EXTRA${Math.random().toString(36).slice(2, 14).toUpperCase()}`,
+    poId: `PO-9${String(seq).padStart(4, "0")}`,
+    invoiceId: `INV-1${String(seq).padStart(2, "0")}`,
+    amount: randomAmount(),
+  };
+}
+
+/**
+ * `index` viene de la elección explícita del usuario en el picker; sin
+ * él, se sortea (también al arrancar el server). El número de invoices
+ * extra (0-5) y cuáles vendors del pool les tocan se resuelven acá, una
+ * sola vez por corrida, para que el workbook que se ingesta y el resumen
+ * que ve la UI muestren exactamente lo mismo.
+ */
+export function pickVariant(index?: number): ResolvedDemoVariant {
+  const variant = index !== undefined ? DEMO_VARIANTS[index] : DEMO_VARIANTS[Math.floor(Math.random() * DEMO_VARIANTS.length)];
+  if (!variant) throw new Error(`no demo variant at index ${index}`);
+
+  const extraCount = Math.floor(Math.random() * (variant.extraVendorPool.length + 1));
+  const extraInvoices = shuffledSample(variant.extraVendorPool, extraCount).map((name, i) => buildExtraInvoice(name, i + 1));
+
+  return { ...variant, extraInvoices };
+}
+
+function withVendorNames(variant: ResolvedDemoVariant) {
   const data = structuredClone(baseData);
   data.vendors.forEach((v: { legalName: string }, i: number) => {
     v.legalName = variant.vendorNames[i];
   });
+
+  const today = new Date().toISOString().slice(0, 10);
+  for (const extra of variant.extraInvoices) {
+    data.vendors.push({
+      vendorId: extra.vendorId,
+      legalName: extra.legalName,
+      verificationStatus: "VERIFIED",
+      wallet: { address: extra.walletAddress, attestationStatus: "ATTESTED", version: 1, createdAt: today },
+    });
+    data.purchaseOrders.push({ poId: extra.poId, vendorId: extra.vendorId, amount: extra.amount, status: "OPEN", approverId: "controller@pakta.demo" });
+    data.invoices.push({
+      invoiceId: extra.invoiceId,
+      poId: extra.poId,
+      vendorId: extra.vendorId,
+      amount: extra.amount,
+      dueDate: "2026-09-23",
+      walletAddress: extra.walletAddress,
+      sourceHash: `sha256:demo-${extra.invoiceId.toLowerCase()}`,
+    });
+    data.receipts.push({ poId: extra.poId, confirmedQty: 1, invoicedQty: 1, confirmedBy: "ops@pakta.demo", confirmedAt: today });
+    data.approvals.push({ objectType: "PO", objectId: extra.poId, policyVersion: "FIN-4.2", approverId: "controller@pakta.demo", timestamp: today });
+  }
+
   return data;
 }
 
@@ -96,7 +163,7 @@ function addSheet(
  * the one checked-in `.xlsx`. Same columns, same schema `@pakta/ingestion`
  * already parses — only the source data object changes.
  */
-export async function buildDemoWorkbookBuffer(variant: DemoVariant): Promise<Buffer> {
+export async function buildDemoWorkbookBuffer(variant: ResolvedDemoVariant): Promise<Buffer> {
   const data = withVendorNames(variant);
   const workbook = new ExcelJS.Workbook();
 
@@ -207,7 +274,7 @@ export async function buildDemoWorkbookBuffer(variant: DemoVariant): Promise<Buf
 }
 
 /** For the run-history log — invoiceId/vendorName/amount as this variant loaded them. */
-export function invoiceSummary(variant: DemoVariant): { invoiceId: string; vendorName: string; amount: string }[] {
+export function invoiceSummary(variant: ResolvedDemoVariant): { invoiceId: string; vendorName: string; amount: string }[] {
   const data = withVendorNames(variant);
   const vendorById = new Map(data.vendors.map((v: any) => [v.vendorId, v.legalName]));
   return data.invoices.map((inv: any) => ({

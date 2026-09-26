@@ -36,16 +36,34 @@ body { background: var(--background); color: var(--foreground); font-family: var
 .intake-invoice-id { font-family: var(--font-geist-mono), monospace; font-size: .68rem; color: var(--muted); flex: 0 0 auto; }
 .intake-invoice-vendor { flex: 1; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .intake-invoice-amount { font-family: var(--font-geist-mono), monospace; font-size: .78rem; flex: 0 0 auto; }
-.activity-log { margin-bottom: 1.5rem; display: flex; flex-direction: column; gap: .35rem; }
-.activity-log-heading { margin: 0 0 .15rem; font-family: var(--font-geist-mono), monospace; font-size: .6rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); opacity: .8; }
-.activity-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem; font-size: .72rem; color: var(--muted); }
-.activity-time { font-family: var(--font-geist-mono), monospace; font-size: .6rem; flex: 0 0 auto; }
-
+@keyframes invoice-row-enter { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
+.intake-invoice-row-enter { opacity: 0; animation: invoice-row-enter .4s ease-out forwards; }
+@media (prefers-reduced-motion: reduce) { .intake-invoice-row-enter { animation: none; opacity: 1; } }
 /* Selector de variantes de "Usar datos de ejemplo" — mismo popover que PolicyInfo. */
 .demo-variant-list { display: flex; flex-direction: column; gap: .15rem; max-height: 16rem; overflow-y: auto; }
 .demo-variant-option { padding: .45rem .55rem; border-radius: .5rem; text-align: left; font-size: .78rem; color: var(--foreground); }
 .demo-variant-option:hover { background: var(--surface-2); }
-.payable-list { display: flex; flex-direction: column; gap: 1rem; }.payable-card { overflow: hidden; border: 1.6px solid #181713; border-radius: 1.1rem; background: #fbf8f0; box-shadow: 4px 4px 0 #181713; transition: transform .18s ease, box-shadow .18s ease; }.payable-card:has(button:hover) { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 #181713; }.payable-card-trigger { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 1.15rem; text-align: left; }.payable-card-vendor { margin: 0; font-size: .94rem; font-weight: 700; letter-spacing: -.025em; }.payable-card-id { margin: .2rem 0 0; color: var(--muted); font-family: var(--font-geist-mono), monospace; font-size: .65rem; }.payable-card-amount { font-family: var(--font-geist-mono), monospace; font-size: .9rem; font-weight: 600; letter-spacing: -.04em; }.payable-card-detail { border-top: 1px solid #bdb6a8; padding: 1.05rem 1.15rem; background: #f3eee3; }.payable-card-detail code { font-family: var(--font-geist-mono), monospace; }.payable-settlement { border: 1px solid #83a9b9; border-radius: .65rem; background: #e0edf0; padding: .7rem; color: #28586d; }
+.payable-board { display: grid; grid-template-columns: repeat(3, 1fr); align-items: start; gap: 1.1rem; }
+.payable-column { display: flex; flex-direction: column; gap: .8rem; min-width: 0; }
+.payable-column-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .3rem .15rem; font-family: var(--font-geist-mono), monospace; font-size: .68rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.payable-column-count { display: inline-flex; align-items: center; justify-content: center; min-width: 1.4rem; height: 1.4rem; padding: 0 .3rem; border-radius: 999px; background: color-mix(in srgb, currentColor 16%, transparent); }
+.payable-column-ready .payable-column-heading { color: var(--ready); }
+.payable-column-blocked .payable-column-heading { color: var(--blocked); }
+.payable-column-settled .payable-column-heading { color: var(--settled); }
+.payable-column-list { display: flex; flex-direction: column; gap: .8rem; }
+.payable-column-empty { margin: 0; padding: 1.1rem .9rem; border: 1.5px dashed #bdb6a8; border-radius: 1rem; color: var(--muted); font-size: .74rem; text-align: center; }
+@media (max-width: 900px) { .payable-board { grid-template-columns: 1fr; } }
+.payable-card { overflow: hidden; border: 1.6px solid #181713; border-radius: 1.1rem; background: #fbf8f0; box-shadow: 4px 4px 0 #181713; transition: transform .18s ease, box-shadow .18s ease; }
+.payable-card:has(button:hover) { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 #181713; }
+.payable-card-trigger { display: flex; flex-direction: column; gap: .4rem; width: 100%; padding: 1rem 1.15rem; text-align: left; }
+.payable-card-row { display: flex; align-items: baseline; justify-content: space-between; gap: .75rem; }
+.payable-card-vendor { margin: 0; font-size: .94rem; font-weight: 700; letter-spacing: -.025em; min-width: 0; }
+.payable-card-amount { font-family: var(--font-geist-mono), monospace; font-size: 1.15rem; font-weight: 600; letter-spacing: -.03em; }
+.payable-card-due { flex: 0 0 auto; color: var(--muted); font-size: .72rem; }
+.payable-card-id { margin: 0; min-width: 0; color: var(--muted); font-family: var(--font-geist-mono), monospace; font-size: .65rem; }
+.payable-card-detail { border-top: 1px solid #bdb6a8; padding: 1.05rem 1.15rem; background: #f3eee3; }
+.payable-card-detail code { font-family: var(--font-geist-mono), monospace; }
+.payable-settlement { border: 1px solid #83a9b9; border-radius: .65rem; background: #e0edf0; padding: .7rem; color: #28586d; }
 .policy-popover { border: 1.5px solid #181713; border-radius: .85rem; background: #fbf8f0; box-shadow: 4px 4px 0 #181713; }.status-badge { border: 1px solid currentColor; font-family: var(--font-geist-mono), monospace; font-size: .6rem; font-weight: 700; letter-spacing: .02em; }.status-ready { background: #dcecc6; color: #47771e; }.status-blocked { background: #f3d6ce; color: #a23d28; }.status-settled { background: #d5e7ed; color: #2c6078; }.severity-low { background: #e8e2d6; color: #625d53; }.severity-medium { background: #efe1b6; color: #805e12; }.severity-high { background: #f1d0b7; color: #a4491f; }.severity-critical { background: #f3d6ce; color: #a23d28; }
 /* Pipeline strip: un solo nodo encendido a la vez — el paso que realmente se está ejecutando ahora. Sin caja, sin conteos. */
 .pipeline-strip { display: flex; align-items: flex-start; margin-bottom: 2.5rem; }
@@ -69,6 +87,19 @@ body { background: var(--background); color: var(--foreground); font-family: var
 .summary-tile-blocked .summary-tile-amount { color: var(--blocked); }
 .summary-tile-settled .summary-tile-amount { color: var(--settled); }
 @media (max-width: 760px) { .summary-strip { grid-template-columns: 1fr; } }
+
+/* Historial de pruebas: bajo el panel de Intake, siempre visible — persiste toda carga de ejemplo/workbook/PDF de la demo. */
+.intake-history { margin-top: 1.1rem; padding: 1rem 1.15rem; border: 1.5px dashed #bdb6a8; border-radius: 1.1rem; background: #f7f3e9; }
+.intake-history-heading { margin: 0 0 .7rem; font-family: var(--font-geist-mono), monospace; font-size: .6rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.intake-history-empty { margin: 0; color: var(--muted); font-size: .78rem; }
+.intake-history-list { display: flex; flex-direction: column; gap: .55rem; max-height: 14rem; overflow-y: auto; }
+.intake-history-row { display: flex; flex-wrap: wrap; align-items: center; gap: .55rem; font-size: .76rem; }
+.intake-history-tag { flex: 0 0 auto; border: 1px solid currentColor; border-radius: .4rem; padding: .1rem .4rem; font-family: var(--font-geist-mono), monospace; font-size: .58rem; font-weight: 700; letter-spacing: .03em; }
+.intake-history-tag-demo { background: var(--live-bg); color: var(--live); }
+.intake-history-tag-workbook { background: var(--ready-bg); color: var(--ready); }
+.intake-history-tag-pdf { background: var(--settled-bg); color: var(--settled); }
+.intake-history-message { flex: 1 1 220px; min-width: 0; color: var(--foreground); }
+.intake-history-time { flex: 0 0 auto; font-family: var(--font-geist-mono), monospace; font-size: .62rem; color: var(--muted); }
 :focus-visible { outline: 2px solid #70a82b; outline-offset: 3px; }
 
-@media (max-width: 760px) { .control-main { width: calc(100% - 2rem); padding-top: 3.5rem; }.payable-card-trigger { align-items: start; }.payable-card-amount { display: none; }.intake-dropzone { padding: 1.5rem 1rem; }.pipeline-strip-label { font-size: .5rem; } }
+@media (max-width: 760px) { .control-main { width: calc(100% - 2rem); padding-top: 3.5rem; }.intake-dropzone { padding: 1.5rem 1rem; }.pipeline-strip-label { font-size: .5rem; } }

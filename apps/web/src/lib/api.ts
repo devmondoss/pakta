@@ -96,10 +96,6 @@ export function getSummary(): Promise<Summary> {
   return apiFetch("/summary");
 }
 
-export function getActivity(): Promise<ActivityEntry[]> {
-  return apiFetch("/activity");
-}
-
 export function getDemoVariants(): Promise<DemoVariant[]> {
   return apiFetch("/demo/variants");
 }

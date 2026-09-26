@@ -8,6 +8,7 @@ import {
   confirmReceipt,
   getSettlement,
   listActivity,
+  listIntakeRuns,
   logActivity,
   NoSettlementError,
   recordSettlement,
@@ -78,7 +79,7 @@ export async function buildApp(opts: { extractor?: InvoiceExtractor } = {}) {
     }
   });
 
-  /** Las 10 variantes que el picker de "Usar datos de ejemplo" ofrece — solo índice + nombre, nunca los montos/relaciones internas. */
+  /** Las 5 variantes que el picker de "Usar datos de ejemplo" ofrece — solo índice + nombre, nunca los montos/relaciones internas. */
   app.get("/demo/variants", async () => DEMO_VARIANTS.map((v, index) => ({ index, label: v.label })));
 
   /**
@@ -98,6 +99,9 @@ export async function buildApp(opts: { extractor?: InvoiceExtractor } = {}) {
 
   /** Actividad real reciente — subidas, resoluciones, settlements — no un log de qué dataset de demo se usó. */
   app.get("/activity", async () => listActivity(db));
+
+  /** El historial de pruebas que muestra el panel de Intake — solo cargas de datos de ejemplo, workbooks y PDFs. */
+  app.get("/activity/runs", async () => listIntakeRuns(db));
 
   app.get("/health", async () => ({ status: "ok" }));
 

@@ -28,6 +28,10 @@ function ChevronIcon({ open }: { open: boolean }) {
   );
 }
 
+function formatDueDate(dueDate: string): string {
+  return new Date(`${dueDate}T00:00:00`).toLocaleDateString("es", { day: "2-digit", month: "short" });
+}
+
 function ProofDetail({ payableId }: { payableId: string }) {
   const [proof, setProof] = useState<ProofOfPayable | "loading" | "error">("loading");
 
@@ -62,17 +66,18 @@ export function PayableCard({ payable, vendor }: { payable: Payable; vendor?: Ve
   return (
     <div className="payable-card">
       <button onClick={() => setOpen((v) => !v)} className="payable-card-trigger">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="min-w-0">
-            <p className="payable-card-vendor truncate">{payable.vendorName}</p>
-            <p className="payable-card-id truncate">
-              {payable.invoiceId} · {payable.poId}
-            </p>
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-3">
-          <span className="payable-card-amount">{payable.amount}</span>
+        <div className="payable-card-row">
+          <p className="payable-card-vendor truncate">{payable.vendorName}</p>
           <StatusBadge status={payable.status} />
+        </div>
+        <div className="payable-card-row">
+          <span className="payable-card-amount">USD {payable.amount}</span>
+          <span className="payable-card-due">Vence {formatDueDate(payable.dueDate)}</span>
+        </div>
+        <div className="payable-card-row">
+          <p className="payable-card-id truncate">
+            {payable.invoiceId} · {payable.poId}
+          </p>
           <ChevronIcon open={open} />
         </div>
       </button>

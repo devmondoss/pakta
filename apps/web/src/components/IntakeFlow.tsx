@@ -116,9 +116,12 @@ export function IntakeFlow({
     setStepIndex(0);
     setError("");
 
+    // Cada paso se queda visible un rato — la demo existe para enseñar que
+    // hay verificaciones corriendo, así que no puede resolverse de un
+    // parpadeo aunque la API real responda en milisegundos.
     const revealSteps = (async () => {
       for (let i = 0; i < flowSteps.length - 1; i++) {
-        await wait(350);
+        await wait(800);
         setStepIndex(i + 1);
       }
     })();
@@ -133,7 +136,7 @@ export function IntakeFlow({
         }),
       ]);
       setStepIndex(flowSteps.length);
-      await wait(300);
+      await wait(650);
       setResult(outcome);
       setState("done");
       router.refresh();
@@ -352,8 +355,12 @@ export function IntakeFlow({
           </div>
           {result.invoices && (
             <div className="intake-invoice-preview">
-              {result.invoices.map((inv) => (
-                <div key={inv.invoiceId} className="intake-invoice-row">
+              {result.invoices.map((inv, i) => (
+                <div
+                  key={inv.invoiceId}
+                  className="intake-invoice-row intake-invoice-row-enter"
+                  style={{ animationDelay: `${i * 90}ms` }}
+                >
                   <span className="intake-invoice-id">{inv.invoiceId}</span>
                   <span className="intake-invoice-vendor">{inv.vendorName}</span>
                   <span className="intake-invoice-amount">{inv.amount}</span>
