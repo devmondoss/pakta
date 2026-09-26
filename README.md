@@ -48,24 +48,23 @@ Cuando las condiciones se cumplen, Pakta emite un **Proof-of-Payable** y habilit
 
 ## ⚙️ Cómo funciona
 
-```text
-Excel / CSV / PDF / Email / Accounting App
-                    ↓
-              AI INGESTION
- extract · classify · match · request missing evidence
-                    ↓
-         DETERMINISTIC VERIFICATION
- PO · invoice · receipt · vendor · wallet · approvals · policy
-              ↙                 ↘
-       EXCEPTION              READY
- reason + owner                 ↓
- notify + resolve        Proof-of-Payable
-       ↓                         ↓
-    revalidate           Stellar / USDC
-              ↘                 ↓
-               SETTLEMENT PROOF
-                      ↓
-              Reconciliation
+```mermaid
+flowchart TD
+    A["Fuentes de evidencia<br/>Excel · CSV · PDF · email · ERP"] --> B["Ingesta y normalización<br/>Canonical Payable Model"]
+    B --> C["Análisis de Pakta<br/>extrae, clasifica y vincula evidencia"]
+    C --> D{"Verificación de política<br/>PO · invoice · receipt · wallet · approvals"}
+    D -->|"Falta evidencia o hay conflicto"| E["Excepción tipada<br/>causa · responsable · acción requerida"]
+    E --> F["Resolver y revalidar"]
+    F --> D
+    D -->|"Todo coincide"| G["Proof-of-Payable<br/>importe · destino · vigencia · hash"]
+    G --> H["PayableGate / Soroban<br/>registro y límites en cadena"]
+    H --> I["Settlement en Stellar testnet<br/>USDC de prueba"]
+    I --> J["Conciliación ERP y bitácora"]
+
+    classDef success fill:#dcecc6,stroke:#4d8120,color:#181713
+    classDef alert fill:#f3d6ce,stroke:#b54931,color:#181713
+    class G,H,I,J success
+    class E,F alert
 ```
 
 La IA nunca es la autoridad final sobre el dinero: **interpreta y propone**, pero un **kernel de verificación determinístico** decide si el payable puede liquidarse. Esa es la distinción central de Pakta frente a "un LLM con acceso al treasury".
@@ -80,6 +79,33 @@ La IA nunca es la autoridad final sobre el dinero: **interpreta y propone**, per
 
 El lote puede contener de 5 a 10 facturas: las excepciones se mantienen visibles como casos de control y los payables `READY` recorren automáticamente settlement y reconciliación. La notificación de cierre es una simulación visual del demo; la transacción de Stellar y los registros de actividad sí quedan trazados.
 
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as Usuario
+    participant W as Control Room
+    participant A as Pakta API
+    participant P as Política y proof
+    participant G as PayableGate
+    participant S as Stellar testnet
+    participant E as ERP demo
+
+    U->>W: Carga un dataset
+    W->>A: POST /demo/reset
+    A-->>W: Lote evaluado: READY y BLOCKED
+    loop Por cada payable READY
+        W->>A: POST /payables/:id/settle
+        A->>P: Revalida evidencia y construye proof
+        P-->>A: Proof firmado y vigente
+        A->>G: Registra y liquida el payable
+        G->>S: Ejecuta settlement de USDC de prueba
+        S-->>A: tx_hash y ledger confirmados
+        A->>E: Registra conciliación automática del demo
+        E-->>W: Estado RECONCILED
+    end
+    W-->>U: Resumen del lote con total acumulado
+```
+
 ### El caso que resume la tesis: `VENDOR_WALLET_CHANGED`
 
 Invoice, PO, receipt, monto, presupuesto y firma del agente pueden estar perfectos — pero si el proveedor cambió su wallet de destino, esa relación **todavía no está probada**. Pakta bloquea el pago, crea una excepción con owner (`Vendor Master / Treasury`) y acción requerida (`Reverify wallet ownership`), y **revalida automáticamente** en cuanto se confirma la nueva wallet.
@@ -88,7 +114,21 @@ Invoice, PO, receipt, monto, presupuesto y firma del agente pueden estar perfect
 
 ## 🏗️ Arquitectura
 
-![Arquitectura de Pakta](docs/assets/mermaid-diagram.png)
+```mermaid
+flowchart LR
+    UI["Next.js<br/>Control Room"] <--> API["Fastify API<br/>orquestación y audit log"]
+    API <--> DB[("Neon / PostgreSQL<br/>evidencia, política y estados")]
+    API --> AI["NVIDIA NIM<br/>extracción de documentos"]
+    API --> K["Rules Kernel<br/>verificación versionada"]
+    API <--> G["Soroban PayableGate<br/>proof y settlement"]
+    G <--> ST["Stellar testnet<br/>activo USDC de prueba"]
+    API --> ERP["Adaptador ERP del demo<br/>reconciliación"]
+
+    classDef chain fill:#d5e7ed,stroke:#356d86,color:#181713
+    classDef core fill:#dcecc6,stroke:#4d8120,color:#181713
+    class API,K core
+    class G,ST chain
+```
 
 | Capa | Responsabilidad |
 |---|---|
