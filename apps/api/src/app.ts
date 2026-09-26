@@ -132,6 +132,18 @@ export async function buildApp(options: BuildAppOptions = {}) {
     };
   }
 
+  // The chain may have accepted a settlement while the API process was down
+  // (or before its response reached us). Reconcile its events before serving
+  // the board, so a completed payment never remains visually "READY".
+  async function reconcileChainState(): Promise<void> {
+    if (!settlement.chain?.indexer) return;
+    try {
+      await settlement.chain.indexer.poll();
+    } catch (error) {
+      app.log.warn({ err: error }, "could not reconcile settlement events from Stellar");
+    }
+  }
+
   /** Las 5 variantes que el picker de "Probar con un caso real" ofrece — solo índice + nombre, nunca los montos/relaciones internas. */
   app.get("/demo/variants", async () => DEMO_VARIANTS.map((v, index) => ({ index, label: v.label })));
 
@@ -169,6 +181,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   app.get("/policy", async () => loadPolicy());
 
   app.get("/payables", async () => {
+    await reconcileChainState();
     const { payables, results } = await evaluateLive(db, now());
     const byPayableId = new Map(results.map((r) => [r.payableId, r]));
 
@@ -287,6 +300,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
    */
   app.post<{ Params: { payableId: string } }>("/payables/:payableId/settle", async (request, reply) => {
     const payableId = request.params.payableId;
+    await reconcileChainState();
     const existing = await settledInfo(payableId);
     if (existing) return { status: "ALREADY_SETTLED", payableId, settlement: existing };
 
@@ -306,10 +320,20 @@ export async function buildApp(options: BuildAppOptions = {}) {
     }
 
     try {
-      const proof = buildProofOfPayable(payable, result, at);
+      const existingProof = await store.getProof(payableId);
+      // Once a payable has been registered, the signed proof is bound to its
+      // exact expiry. Rebuilding it with a fresh 48-hour window would produce
+      // a different hash and the contract rightly rejects it as a mismatch.
+      const proof = buildProofOfPayable(
+        payable,
+        result,
+        at,
+        existingProof?.status === "REGISTERED" ? { expiresAt: new Date(existingProof.expiry * 1000) } : undefined,
+      );
       const { signed } = settlement.chain.issuer.sign(proof, deployment);
       const outcome = await enqueueSettlement(() => settlement.chain!.adapter.settle(signed, settlementContext(payable)));
       if (outcome.status === "ALREADY_SETTLED") {
+        await reconcileChainState();
         return { status: "ALREADY_SETTLED", payableId, settlement: await settledInfo(payableId) };
       }
       await logActivity(db, `Settlement confirmado en Stellar para ${payableId} (tx ${outcome.settleTx.txHash})`)
@@ -323,6 +347,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
       };
     } catch (err) {
       if (err instanceof SettlementRefused) {
+        request.log.warn({ payableId, reason: err.reason, error: err.message }, "settlement refused by chain");
         return reply.code(409).send({ error: err.message, reason: err.reason });
       }
       if (err instanceof ProofBuilderError) return reply.code(409).send({ error: err.message });

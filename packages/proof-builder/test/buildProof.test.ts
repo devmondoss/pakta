@@ -54,6 +54,16 @@ describe("buildProofOfPayable", () => {
     expect(diffHours).toBe(48);
   });
 
+  it("reproduces a registered proof when its original expiry is retained", () => {
+    const { payable, result } = find("INV-001");
+    const original = buildProofOfPayable(payable, result, now);
+    const resumed = buildProofOfPayable(payable, result, new Date("2026-09-24T12:00:00Z"), {
+      expiresAt: new Date(original.expires_at),
+    });
+
+    expect(resumed).toEqual(original);
+  });
+
   it("refuses to build a proof for a BLOCKED payable", () => {
     const { payable, result } = find("INV-002");
     expect(result.status).toBe("BLOCKED");

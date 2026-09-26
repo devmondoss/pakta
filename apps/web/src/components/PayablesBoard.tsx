@@ -78,15 +78,17 @@ export function PayablesBoard({
   // espera a que la red responda por el anterior.
   const autoSettleInFlightRef = useRef(false);
   const autoSettleStartedAtRef = useRef<number | null>(null);
-  const autoSettleSubmittedRef = useRef<Set<string>>(new Set());
+  const autoSettleAttemptedRef = useRef<Set<string>>(new Set());
+  const autoSettlementPausedRef = useRef(false);
   useEffect(() => {
     payablesRef.current = payables;
   }, [payables]);
   useEffect(() => {
     const readyIds = new Set(initialPayables.filter((payable) => payable.status === "READY").map((payable) => payable.payableId));
-    for (const payableId of autoSettleSubmittedRef.current) {
-      if (!readyIds.has(payableId)) autoSettleSubmittedRef.current.delete(payableId);
+    for (const payableId of autoSettleAttemptedRef.current) {
+      if (!readyIds.has(payableId)) autoSettleAttemptedRef.current.delete(payableId);
     }
+    if (autoSettleAttemptedRef.current.size === 0) autoSettlementPausedRef.current = false;
     if (notifyTransitions(payablesRef.current, initialPayables)) onProgress?.();
     setPayables(initialPayables);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -131,9 +133,9 @@ export function PayablesBoard({
     }
 
     const id = setInterval(() => {
-      if (autoSettleInFlightRef.current) return;
+      if (autoSettleInFlightRef.current || autoSettlementPausedRef.current) return;
       const next = payablesRef.current.find(
-        (payable) => payable.status === "READY" && !autoSettleSubmittedRef.current.has(payable.payableId),
+        (payable) => payable.status === "READY" && !autoSettleAttemptedRef.current.has(payable.payableId),
       );
       if (!next) {
         autoSettleStartedAtRef.current = null;
@@ -149,11 +151,15 @@ export function PayablesBoard({
 
       autoSettleInFlightRef.current = true;
       autoSettleStartedAtRef.current = null;
+      // Un rechazo de testnet no se reintenta a ciegas cada pocos segundos.
+      autoSettleAttemptedRef.current.add(next.payableId);
       postAction(`/payables/${encodeURIComponent(next.payableId)}/settle`)
         .then((ok) => {
-          if (!ok) return;
-          autoSettleSubmittedRef.current.add(next.payableId);
-          router.refresh();
+          if (ok) {
+            router.refresh();
+            return;
+          }
+          autoSettlementPausedRef.current = true;
         })
         .finally(() => {
           autoSettleInFlightRef.current = false;

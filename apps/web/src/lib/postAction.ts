@@ -29,11 +29,25 @@ export async function postAction(path: string, body?: unknown, method: "POST" | 
     const payload = await res.json().catch(() => ({}));
     const detail = typeof payload.error === "string" ? payload.error : "";
     // `TRY_AGAIN_LATER` es una respuesta transitoria del nodo; no es una
-    // instrucción accionable para la persona usando Pakta.
-    const message = detail.includes("TRY_AGAIN_LATER")
-      ? "La red está ocupada. Esperá unos segundos e intentá nuevamente."
-      : "No pudimos completar esta acción. Intentá nuevamente.";
-    pushToast("No se pudo completar la acción", message, "error");
+    // instrucción accionable para la persona usando Pakta. Los rechazos de
+    // cadena que no se arreglan reintentando merecen una explicación precisa.
+    if (detail.includes("registered on-chain with a different")) {
+      pushToast(
+        "El proof registrado no coincide",
+        "Este lote ya fue registrado con evidencia distinta. Hay que revocarlo y emitir un payable nuevo; reintentar no puede mover fondos.",
+        "error",
+      );
+    } else if (detail.includes("settle was refused by the gate: UnknownIssuer")) {
+      pushToast(
+        "La wallet del proveedor no está lista en testnet",
+        "Este lote antiguo apunta a una cuenta que no puede recibir el activo de prueba. Hay que revocarlo y reemitirlo con una wallet atestada.",
+        "error",
+      );
+    } else if (detail.includes("TRY_AGAIN_LATER")) {
+      pushToast("La red está ocupada", "Esperá unos segundos e intentá nuevamente.", "error");
+    } else {
+      pushToast("No se pudo completar la acción", "Intentá nuevamente.", "error");
+    }
   } catch {
     pushToast("No se pudo conectar", "La API no está disponible en este momento. Intentá nuevamente en unos segundos.", "error");
   }

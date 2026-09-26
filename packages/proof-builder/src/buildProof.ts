@@ -48,7 +48,12 @@ function toUtcSeconds(date: Date): string {
  * The result is validated against the v1.1 schema before it is returned, so a
  * proof that could not settle is refused here rather than three services later.
  */
-export function buildProofOfPayable(payable: CanonicalPayable, result: KernelResult, now: Date): ProofOfPayable {
+export function buildProofOfPayable(
+  payable: CanonicalPayable,
+  result: KernelResult,
+  now: Date,
+  options: { expiresAt?: Date } = {},
+): ProofOfPayable {
   if (result.status !== "READY") {
     throw new ProofBuilderError(`cannot build a proof for ${payable.payableId}: kernel result is BLOCKED`);
   }
@@ -61,7 +66,10 @@ export function buildProofOfPayable(payable: CanonicalPayable, result: KernelRes
     throw new ProofBuilderError(`${payable.payableId} is READY but has no attested vendor wallet on file`);
   }
 
-  const expiresAt = new Date(now.getTime() + DEFAULT_VALIDITY_HOURS * 60 * 60 * 1000);
+  // A registered payable is immutable on-chain: rebuilding it with a new
+  // relative expiry changes both `expires_at` and `proof_hash`. Callers that
+  // resume such a registration pass the original expiry back in.
+  const expiresAt = options.expiresAt ?? new Date(now.getTime() + DEFAULT_VALIDITY_HOURS * 60 * 60 * 1000);
 
   const proof = {
     payable_id: payable.payableId,
