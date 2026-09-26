@@ -9,7 +9,7 @@ type IllustrationName = "evidence" | "review" | "release";
 
 const cards: { title: string; copy: string; illustration: IllustrationName; tilt: number }[] = [
   { title: "Toda la evidencia,\nen un solo lugar", copy: "PO, invoice, receipt y proveedor unidos antes de decidir.", illustration: "evidence", tilt: -3 },
-  { title: "Una política que\nsí se puede explicar", copy: "Las reglas determinísticas toman la decisión, no una corazonada.", illustration: "review", tilt: 2.1 },
+  { title: "Una política que\nsí se puede explicar", copy: "Pakta comprueba cada condición y deja la decisión lista para auditar.", illustration: "review", tilt: 2.1 },
   { title: "Un cierre que\ndeja rastro", copy: "El settlement y la conciliación quedan registrados al cerrar el ciclo.", illustration: "release", tilt: -2.4 },
 ];
 
@@ -82,7 +82,7 @@ export function LandingPage() {
         <motion.div className="landing-proof-paper" {...reveal} transition={{ duration: 0.6 }} viewport={{ once: true, amount: 0.25 }}><div><span>EJEMPLO ILUSTRATIVO</span><strong>TODO COINCIDE</strong></div><b>USD 500.00</b><dl><dt>Factura</dt><dd>INV-TEC-2401</dd><dt>Checks</dt><dd>PO · receipt · wallet</dd><dt>Política</dt><dd>FIN-4.2 · cumplida</dd></dl><footer>proof → Stellar testnet → ERP conciliado <span>↗</span></footer></motion.div>
       </section>
 
-      <section className="landing-process" id="como-funciona"><p className="landing-section-label">CÓMO FUNCIONA</p><h2>Cuatro pasos.<br />Sin cajas negras.</h2><div className="landing-process-grid">{[["01", "Conecta", "Recibimos PO, invoice, receipt y datos del proveedor."], ["02", "Comprueba", "Las reglas determinísticas verifican cada condición."], ["03", "Autoriza", "El proof deja clara la razón por la que se puede pagar."], ["04", "Liquida y cierra", "Stellar testnet confirma el settlement y el ERP queda conciliado."]].map(([number, title, copy]) => <article key={number}><span>{number}</span><h3>{title}</h3><p>{copy}</p><i>↘</i></article>)}</div></section>
+      <section className="landing-process" id="como-funciona"><p className="landing-section-label">CÓMO FUNCIONA</p><h2>Cuatro pasos.<br />Sin cajas negras.</h2><div className="landing-process-grid">{[["01", "Conecta", "Recibimos PO, invoice, receipt y datos del proveedor."], ["02", "Comprueba", "Pakta verifica cada condición contra la política aplicada."], ["03", "Autoriza", "El proof deja clara la razón por la que se puede pagar."], ["04", "Liquida y cierra", "Stellar testnet confirma el settlement y el ERP queda conciliado."]].map(([number, title, copy]) => <article key={number}><span>{number}</span><h3>{title}</h3><p>{copy}</p><i>↘</i></article>)}</div></section>
       <section className="landing-closing"><p>PAKTA / CONTROL CON CRITERIO</p><h2>Menos fe.<br />Más <span>evidencia.</span></h2><Link href="/control-room">Entra a la demo <ArrowUpRight size={17} /></Link></section>
       <footer className="landing-footer"><span>PAKTA © 2026</span><span>Evidence before execution.</span><span>Hecho para pagos que deben poder explicarse.</span></footer>
     </main>
