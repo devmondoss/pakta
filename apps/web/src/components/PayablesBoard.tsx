@@ -71,11 +71,26 @@ export function PayablesBoard({
   useEffect(() => onPayablesChange?.(payables), [payables, onPayablesChange]);
   const vendorById = new Map(vendors.map((v) => [v.vendorId, v]));
 
+  // Repregunta cada 6s en vez de una sola vez al montar — si esta pestaña
+  // ya estaba abierta antes de que el settlement se prendiera/apagara del
+  // lado del server, un chequeo único la dejaba con el estado viejo para
+  // siempre, sin ninguna forma de enterarse del cambio.
   useEffect(() => {
-    fetch(`${API_URL}/health`, { cache: "no-store" })
-      .then((res) => res.ok ? res.json() : Promise.reject())
-      .then((health) => setSettlementEnabled(health.settlement === "enabled"))
-      .catch(() => setSettlementEnabled(false));
+    let active = true;
+    async function checkHealth() {
+      try {
+        const res = await fetch(`${API_URL}/health`, { cache: "no-store" });
+        if (active && res.ok) setSettlementEnabled((await res.json()).settlement === "enabled");
+      } catch {
+        // API momentarily unreachable — keep showing the last known state.
+      }
+    }
+    checkHealth();
+    const id = setInterval(checkHealth, 6000);
+    return () => {
+      active = false;
+      clearInterval(id);
+    };
   }, []);
 
   // Polls independently of navigation — a resolved exception (or a
