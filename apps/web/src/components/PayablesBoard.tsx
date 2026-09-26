@@ -120,14 +120,14 @@ export function PayablesBoard({
 
   if (stage === 1) {
     return (
-      <div className="pipeline-slide">
+      <div key={stage} className="pipeline-slide pipeline-slide-enter">
         <p className="pipeline-slide-heading">Verificación · {payables.length} payables evaluados</p>
         {payables.length === 0 ? (
           <p className="payable-column-empty">Nada evaluado todavía.</p>
         ) : (
           <div className="verification-list">
-            {payables.map((p) => (
-              <div key={p.payableId} className="verification-row">
+            {payables.map((p, i) => (
+              <div key={p.payableId} className="verification-row stage-item-enter" style={{ animationDelay: `${i * 60}ms` }}>
                 <div className="verification-row-top">
                   <span className="verification-vendor truncate">{p.vendorName}</span>
                   <span className="verification-id truncate">
@@ -157,7 +157,7 @@ export function PayablesBoard({
   const blocked = stage === 3 ? payables.filter((p) => p.status === "BLOCKED") : [];
 
   return (
-    <div className="pipeline-slide">
+    <div key={stage} className="pipeline-slide pipeline-slide-enter">
       <p className="pipeline-slide-heading">
         {config.heading} · {items.length}
       </p>
@@ -166,15 +166,16 @@ export function PayablesBoard({
         <p className="payable-column-empty">{config.empty}</p>
       ) : (
         <div className="pipeline-slide-list">
-          {items.map((payable) => (
-            <PayableCard
-              key={payable.payableId}
-              payable={payable}
-              vendor={vendorById.get(payable.vendorId)}
-              settlementEnabled={settlementEnabled}
-              focus={config.focus}
-              collapsible={false}
-            />
+          {items.map((payable, i) => (
+            <div key={payable.payableId} className="stage-item-enter" style={{ animationDelay: `${i * 90}ms` }}>
+              <PayableCard
+                payable={payable}
+                vendor={vendorById.get(payable.vendorId)}
+                settlementEnabled={settlementEnabled}
+                focus={config.focus}
+                collapsible={false}
+              />
+            </div>
           ))}
         </div>
       )}
@@ -182,8 +183,8 @@ export function PayablesBoard({
         <div className="no-proof-section">
           <p className="no-proof-heading">Todavía sin proof · {blocked.length}</p>
           <div className="verification-list">
-            {blocked.map((p) => (
-              <div key={p.payableId} className="verification-row">
+            {blocked.map((p, i) => (
+              <div key={p.payableId} className="verification-row stage-item-enter" style={{ animationDelay: `${i * 60}ms` }}>
                 <div className="verification-row-top">
                   <span className="verification-vendor truncate">{p.vendorName}</span>
                   <span className="verification-id truncate">

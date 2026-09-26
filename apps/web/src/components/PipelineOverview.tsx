@@ -30,7 +30,8 @@ export function PipelineOverview({
             className={`pipeline-strip-node pipeline-strip-node-${kind} ${i === viewIndex ? "pipeline-strip-node-viewed" : ""}`}
           >
             <span className="pipeline-strip-line" aria-hidden />
-            <span className="pipeline-strip-dot" aria-hidden />
+            {/* `key={kind}` remonta el punto cuando pasa a "done" — eso es lo que dispara el pop, no una animación que corre siempre. */}
+            <span key={kind} className={`pipeline-strip-dot ${kind === "done" ? "pipeline-strip-dot-pop" : ""}`} aria-hidden />
             <span className="pipeline-strip-label">{label}</span>
           </button>
         );

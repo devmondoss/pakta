@@ -66,9 +66,13 @@ function ProofDetail({ payable }: { payable: Payable }) {
   return (
     <div className="flex flex-col gap-3">
       <ul className="payable-checklist">
-        {explainReady(proof).map((item) => (
-          <li key={item.label} className="payable-checklist-item">
-            <span className="payable-checklist-mark">✓</span>
+        {explainReady(proof).map((item, i) => (
+          <li
+            key={item.label}
+            className="payable-checklist-item"
+            style={{ animationDelay: `${i * 90}ms` }}
+          >
+            <span className="payable-checklist-mark" style={{ animationDelay: `${i * 90 + 120}ms` }}>✓</span>
             <span>
               <span className="payable-checklist-label">{item.label}</span> — {item.detail}
             </span>

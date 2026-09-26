@@ -10,7 +10,10 @@ export function StatusBadge({ status }: { status: "READY" | "BLOCKED" | "SETTLED
     SETTLED: "bg-settled",
   };
   return (
-    <span className={`status-badge inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 ${styles[status]}`}>
+    // `key={status}` fuerza un remount cada vez que el estado cambia de
+    // verdad (no en cada poll) — eso es lo que dispara `status-badge-pop`
+    // de nuevo, sin tener que trackear el valor anterior a mano.
+    <span key={status} className={`status-badge status-badge-pop inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 ${styles[status]}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${dotStyles[status]}`} />
       {status}
     </span>
