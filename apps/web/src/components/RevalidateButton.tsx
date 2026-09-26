@@ -21,7 +21,7 @@ export function RevalidateButton({ payableId }: { payableId: string }) {
     <button
       onClick={revalidate}
       disabled={pending}
-      className="rounded-full bg-background px-2.5 py-1 text-xs font-medium text-muted hover:text-foreground disabled:opacity-50"
+      className="app-button-secondary"
     >
       {pending ? "Revalidando…" : "Revalidar"}
     </button>

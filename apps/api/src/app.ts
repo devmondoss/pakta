@@ -1,7 +1,16 @@
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import type { Vendor, VendorWallet } from "@pakta/canonical-model";
-import { attestWallet, confirmReceipt, registerWalletChange } from "@pakta/db";
+import {
+  attestWallet,
+  confirmReceipt,
+  listActivity,
+  logActivity,
+  NoSettlementError,
+  registerWalletChange,
+  resetDb,
+  updateErpPostingStatus,
+} from "@pakta/db";
 import { buildProofOfPayable, ProofBuilderError } from "@pakta/proof-builder";
 import { createNvidiaExtractor, type InvoiceExtractor } from "@pakta/ai-extraction";
 import { GateError, SettlementRefused, type Deployment } from "@pakta/settlement";
@@ -9,7 +18,8 @@ import { isAccountId, unitsToDecimal } from "@pakta/stellar-sdk-wrapper";
 import Fastify from "fastify";
 import { getDb } from "./db.js";
 import { evaluateLive } from "./demoData.js";
-import { ingestAndPersist, ingestPdfAndPersist, loadPolicy, seedIfEmpty } from "./ingest.js";
+import { DEMO_VARIANTS } from "./demoVariants.js";
+import { ingestAndPersist, ingestPdfAndPersist, loadPolicy, seedDemo, seedIfEmpty } from "./ingest.js";
 import { toApiPayable, type SettledInfo } from "./mapPayable.js";
 import {
   createSettlementServices,
@@ -77,7 +87,9 @@ export async function buildApp(options: BuildAppOptions = {}) {
     }
 
     try {
-      return { kind: "workbook", ...(await ingestAndPersist(db, buffer)) };
+      const outcome = await ingestAndPersist(db, buffer);
+      await logActivity(db, `Workbook subido — ${outcome.ingested} payables ingestados`);
+      return { kind: "workbook", ...outcome };
     } catch (err) {
       return reply.code(400).send({ error: `could not parse workbook: ${(err as Error).message}` });
     }
@@ -94,6 +106,30 @@ export async function buildApp(options: BuildAppOptions = {}) {
       erpPostingStatus: record.erpPostingStatus,
     };
   }
+
+  /** Las 10 variantes que el picker de "Usar datos de ejemplo" ofrece — solo índice + nombre, nunca los montos/relaciones internas. */
+  app.get("/demo/variants", async () => DEMO_VARIANTS.map((v, index) => ({ index, label: v.label })));
+
+  /**
+   * "Usar datos de ejemplo" en el Intake: no re-sube el xlsx crudo desde el
+   * cliente (eso perdía el hecho externo que `seedDemo` persiste — el
+   * fingerprint que hace que INV-002 caiga en DUPLICATE_INVOICE). Wipea y
+   * reseeda por el mismo camino que `resetDemo.ts`, así el resultado es
+   * siempre el 1 READY + 4 BLOCKED canónico, sin importar qué haya dejado
+   * un ensayo anterior. `variantIndex` es la elección explícita del
+   * picker; sin body, se sortea. El arranque usa la variante 0 para ser reproducible.
+   */
+  app.post<{ Body: { variantIndex?: number } }>("/demo/reset", async (request, reply) => {
+    if (settlement.chain || (db.schema === "public" && process.env.PAKTA_DEMO_RESET_ENABLED !== "true")) {
+      return reply.code(403).send({ error: "demo reset requires PAKTA_DEMO_RESET_ENABLED=true and no live settlement" });
+    }
+    await resetDb(db);
+    const { variantLabel, invoices, ingested, rejectedRows } = await seedDemo(db, request.body?.variantIndex);
+    return { kind: "workbook", ingested, rejectedRows, variantLabel, invoices };
+  });
+
+  /** Actividad real reciente — subidas, resoluciones, settlements — no un log de qué dataset de demo se usó. */
+  app.get("/activity", async () => listActivity(db));
 
   app.get("/health", async () => ({
     status: "ok",
@@ -189,6 +225,8 @@ export async function buildApp(options: BuildAppOptions = {}) {
       if (outcome.status === "ALREADY_SETTLED") {
         return { status: "ALREADY_SETTLED", payableId, settlement: await settledInfo(payableId) };
       }
+      await logActivity(db, `Settlement confirmado en Stellar para ${payableId} (tx ${outcome.settleTx.txHash})`)
+        .catch((error: unknown) => request.log.warn({ err: error }, "settlement activity log failed"));
       return {
         status: "SETTLED",
         payableId,
@@ -327,6 +365,34 @@ export async function buildApp(options: BuildAppOptions = {}) {
     return { ...record, explorerUrl: explorerTxUrl(deployment, record.txHash) };
   });
 
+  /**
+   * The ERP posting confirmation is a separate, asynchronous
+   * event in real life — this lets the UI move a settlement from PENDING
+   * to RECONCILED (or FAILED) so the "Reconciliación" pipeline stage has
+   * something to actually trigger during a demo.
+   */
+  app.patch<{
+    Params: { payableId: string };
+    Body: { erpPostingStatus?: string };
+  }>("/payables/:payableId/settlement", async (request, reply) => {
+    const { erpPostingStatus } = request.body ?? {};
+    if (!erpPostingStatus || !["PENDING", "RECONCILED", "FAILED"].includes(erpPostingStatus)) {
+      return reply.code(400).send({ error: "erpPostingStatus must be PENDING, RECONCILED, or FAILED" });
+    }
+    try {
+      const settlement = await updateErpPostingStatus(
+        db,
+        request.params.payableId,
+        erpPostingStatus as "PENDING" | "RECONCILED" | "FAILED",
+      );
+      await logActivity(db, `Reconciliación ERP actualizada para ${request.params.payableId} → ${erpPostingStatus}`);
+      return settlement;
+    } catch (err) {
+      if (err instanceof NoSettlementError) return reply.code(404).send({ error: err.message });
+      throw err;
+    }
+  });
+
   app.get("/vendors", async () => {
     const { payables } = await evaluateLive(db, now());
     const seen = new Map<string, { vendor: Vendor; wallet?: VendorWallet }>();
@@ -357,6 +423,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
       }
 
       const wallet = await registerWalletChange(db, request.params.vendorId, address, new Date());
+      await logActivity(db, `Nueva wallet registrada para ${request.params.vendorId} (pendiente de atestiguar)`);
       return wallet;
     },
   );
@@ -364,7 +431,9 @@ export async function buildApp(options: BuildAppOptions = {}) {
   /** HU-D2-15 step 2: a human confirms the wallet on file is really the vendor's. */
   app.post<{ Params: { vendorId: string } }>("/vendors/:vendorId/wallet/attest", async (request, reply) => {
     try {
-      return await attestWallet(db, request.params.vendorId);
+      const wallet = await attestWallet(db, request.params.vendorId);
+      await logActivity(db, `Wallet atestiguada por Vendor Master para ${request.params.vendorId}`);
+      return wallet;
     } catch (err) {
       return reply.code(404).send({ error: (err as Error).message });
     }
@@ -394,6 +463,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
       { confirmedQty, invoicedQty, confirmedBy: confirmedBy?.trim() || "ops@pakta.demo" },
       new Date(),
     );
+    await logActivity(db, `Operations confirmó recepción para ${payable.payableId} (${poId})`);
     return receipt;
   });
 

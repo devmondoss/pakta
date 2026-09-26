@@ -1,18 +1,35 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Payable, Vendor } from "@/lib/api";
+import type { ActivityEntry, Payable, Vendor } from "@/lib/api";
+import { ActivityLog } from "@/components/ActivityLog";
 import { PayableCard } from "@/components/PayableCard";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
-export function PayablesBoard({ initialPayables, vendors }: { initialPayables: Payable[]; vendors: Vendor[] }) {
+export function PayablesBoard({
+  initialPayables,
+  vendors,
+  activity,
+  onPayablesChange,
+}: {
+  initialPayables: Payable[];
+  vendors: Vendor[];
+  activity: ActivityEntry[];
+  onPayablesChange?: (payables: Payable[]) => void;
+}) {
   const [payables, setPayables] = useState(initialPayables);
   const [settlementEnabled, setSettlementEnabled] = useState(false);
+  const [activityEntries, setActivityEntries] = useState(activity);
   // `router.refresh()` after an action re-renders the page with fresh
   // props; without this the board kept showing stale state until the
   // next 4 s poll, so a click looked like it did nothing.
   useEffect(() => setPayables(initialPayables), [initialPayables]);
+  useEffect(() => setActivityEntries(activity), [activity]);
+  // El flujograma global vive fuera de este componente — le avisamos cada
+  // vez que cambia la lista (carga inicial y cada poll) en vez de que lea
+  // el estado interno del board.
+  useEffect(() => onPayablesChange?.(payables), [payables, onPayablesChange]);
   const vendorById = new Map(vendors.map((v) => [v.vendorId, v]));
 
   useEffect(() => {
@@ -24,13 +41,18 @@ export function PayablesBoard({ initialPayables, vendors }: { initialPayables: P
 
   // Polls independently of navigation — a resolved exception (or a
   // settlement Dev 1 reports) shows up here on its own, without anyone
-  // needing to refresh the page.
+  // needing to refresh the page. La actividad se pide junto con los
+  // payables para que el log no se quede congelado entre refreshes.
   useEffect(() => {
     let active = true;
     const id = setInterval(async () => {
       try {
-        const res = await fetch(`${API_URL}/payables`, { cache: "no-store" });
-        if (active && res.ok) setPayables(await res.json());
+        const [payablesRes, activityRes] = await Promise.all([
+          fetch(`${API_URL}/payables`, { cache: "no-store" }),
+          fetch(`${API_URL}/activity`, { cache: "no-store" }),
+        ]);
+        if (active && payablesRes.ok) setPayables(await payablesRes.json());
+        if (active && activityRes.ok) setActivityEntries(await activityRes.json());
       } catch {
         // API momentarily unreachable — keep showing the last known state.
       }
@@ -41,19 +63,10 @@ export function PayablesBoard({ initialPayables, vendors }: { initialPayables: P
     };
   }, []);
 
-  const blocked = payables.filter((p) => p.status === "BLOCKED").length;
-  const ready = payables.filter((p) => p.status === "READY").length;
-  const settled = payables.filter((p) => p.status === "SETTLED").length;
-
   return (
     <div>
-      <div className="mb-4 flex items-center gap-5 text-sm text-muted">
-        <span>{payables.length} payables</span>
-        {blocked > 0 && <span className="text-live">{blocked} con excepción</span>}
-        {ready > 0 && <span className="text-ready">{ready} listos</span>}
-        {settled > 0 && <span className="text-settled">{settled} liquidados</span>}
-      </div>
-      <div className="flex flex-col gap-2">
+      <ActivityLog entries={activityEntries} />
+      <div className="payable-list">
         {payables.map((payable) => (
           <PayableCard
             key={payable.payableId}

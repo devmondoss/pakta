@@ -4,3 +4,4 @@ export * from "./vendorWallets.js";
 export * from "./receipts.js";
 export * from "./fingerprints.js";
 export * from "./settlements.js";
+export * from "./activityLog.js";

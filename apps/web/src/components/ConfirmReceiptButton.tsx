@@ -21,7 +21,7 @@ export function ConfirmReceiptButton({ payableId }: { payableId: string }) {
     <button
       onClick={confirm}
       disabled={pending}
-      className="rounded-full bg-accent px-2.5 py-1 text-xs font-medium text-accent-foreground hover:opacity-90 disabled:opacity-50"
+      className="app-button-primary"
     >
       {pending ? "Confirmando…" : "Confirmar recepción"}
     </button>

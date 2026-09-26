@@ -52,7 +52,13 @@ sin comprobar el resultado on-chain no es una prueba de liquidación.
 | GET | `/vault` | Balance comprometido y disponible |
 | POST | `/agent/run` | Ejecutar un ciclo del agente |
 | GET | `/summary` | Totales por estado |
+| GET | `/activity` | Actividad reciente |
+| GET | `/demo/variants` | Variantes de datos de ejemplo |
+| POST | `/demo/reset` | Reiniciar datos demo; requiere `PAKTA_DEMO_RESET_ENABLED=true` en el esquema público y settlement desactivado |
+| PATCH | `/payables/:id/settlement` | Marcar el estado ERP de una liquidación ya comprobada |
 
 `PAKTA_AGENT_INTERVAL_MS` permite ciclos automáticos; el valor por defecto es
 `0`. Las rutas de escritura son para el entorno demo: añade autenticación y
 roles de operador antes de exponer esta API públicamente con claves de pago.
+`/demo/reset` borra payables y liquidaciones del esquema configurado. Actívalo
+solo en una base de datos desechable para la demostración.

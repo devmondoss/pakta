@@ -5,6 +5,7 @@ import type { Payable, ProofOfPayable, Vendor } from "@/lib/api";
 import { ConfirmReceiptButton } from "@/components/ConfirmReceiptButton";
 import { RevalidateButton } from "@/components/RevalidateButton";
 import { SettleButton } from "@/components/SettleButton";
+import { ReconcileButton } from "@/components/SettlementActions";
 import { StatusBadge, SeverityBadge } from "@/components/StatusBadge";
 import { WalletActions } from "@/components/WalletActions";
 
@@ -60,25 +61,25 @@ export function PayableCard({ payable, vendor, settlementEnabled }: { payable: P
   const exception = payable.exception;
 
   return (
-    <div className="rounded-2xl bg-surface shadow-[var(--shadow)]">
-      <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center justify-between gap-4 p-4 text-left">
+    <div className="payable-card">
+      <button onClick={() => setOpen((v) => !v)} className="payable-card-trigger">
         <div className="flex min-w-0 items-center gap-3">
           <div className="min-w-0">
-            <p className="truncate text-sm font-medium">{payable.vendorName}</p>
-            <p className="truncate font-mono text-xs text-muted">
+            <p className="payable-card-vendor truncate">{payable.vendorName}</p>
+            <p className="payable-card-id truncate">
               {payable.invoiceId} · {payable.poId}
             </p>
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-3">
-          <span className="font-mono text-sm">{payable.amount}</span>
+          <span className="payable-card-amount">{payable.amount}</span>
           <StatusBadge status={payable.status} />
           <ChevronIcon open={open} />
         </div>
       </button>
 
       {open && (
-        <div className="border-t border-border/60 p-4">
+        <div className="payable-card-detail">
           {exception ? (
             <div className="flex flex-col gap-3">
               <div className="flex items-start justify-between gap-3">
@@ -93,7 +94,7 @@ export function PayableCard({ payable, vendor, settlementEnabled }: { payable: P
                   Owner: <span className="text-foreground">{exception.ownerRole}</span>
                 </span>
               </div>
-              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <div className="flex flex-wrap items-center gap-2 pt-1">
                 {WALLET_REASONS.has(exception.reason) && (
                   <WalletActions vendorId={payable.vendorId} attestationStatus={vendor?.wallet?.attestationStatus} />
                 )}
@@ -113,7 +114,7 @@ export function PayableCard({ payable, vendor, settlementEnabled }: { payable: P
                 />
               )}
               {payable.settlement && (
-                <div className="flex flex-col gap-1 rounded-xl bg-settled-bg p-3 font-mono text-xs text-settled">
+                <div className="payable-settlement flex flex-col gap-2 font-mono text-xs">
                   <a
                     href={payable.settlement.explorerUrl}
                     target="_blank"
@@ -125,6 +126,11 @@ export function PayableCard({ payable, vendor, settlementEnabled }: { payable: P
                   <span>ledger: {payable.settlement.ledger}</span>
                   <span className="break-all">proof_hash: {payable.settlement.proofHash}</span>
                   <span>ERP: {payable.settlement.erpPostingStatus}</span>
+                  {payable.settlement.erpPostingStatus === "PENDING" && (
+                    <div className="pt-1">
+                      <ReconcileButton payableId={payable.payableId} />
+                    </div>
+                  )}
                 </div>
               )}
             </div>

@@ -1,7 +1,7 @@
 import path from "node:path";
 import { resetDb } from "@pakta/db";
 import { getDb } from "./db.js";
-import { seedIfEmpty } from "./ingest.js";
+import { seedDemo } from "./ingest.js";
 
 // Manual, pre-demo only: wipes whatever rehearsals left behind (confirmed
 // receipts, changed wallets, uploaded PDFs, settlements) and reloads the
@@ -15,5 +15,5 @@ try {
 
 const db = await getDb();
 await resetDb(db);
-await seedIfEmpty(db);
+await seedDemo(db);
 console.log(`demo data reset in schema "${db.schema}"`);

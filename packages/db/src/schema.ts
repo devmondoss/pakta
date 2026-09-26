@@ -26,6 +26,14 @@ export const TABLE_NAMES = [
 ] as const;
 
 /**
+ * `activity_log` is deliberately NOT in `TABLE_NAMES`: that list is what
+ * `resetDb` truncates, and the whole point of an activity history is
+ * that it survives the actions it's logging — including a demo reset
+ * itself, which should show up as one more entry, not erase the log.
+ */
+export const ACTIVITY_LOG_TABLE = "activity_log";
+
+/**
  * One statement per call, not one multi-statement string — Neon's HTTP
  * driver sends each query as its own prepared statement and refuses
  * multiple commands in one call. Schema-qualified so tests (schema
@@ -114,6 +122,11 @@ export function schemaStatements(schema: string): string[] {
       name    TEXT PRIMARY KEY,
       cursor  TEXT,
       ledger  INTEGER
+    )`,
+    `CREATE TABLE IF NOT EXISTS ${schema}.${ACTIVITY_LOG_TABLE} (
+      id           SERIAL PRIMARY KEY,
+      occurred_at  TEXT NOT NULL,
+      message      TEXT NOT NULL
     )`,
   ];
 }

@@ -22,6 +22,7 @@
     "@pakta/rules-kernel": "workspace:*",
     "@pakta/settlement": "workspace:*",
     "@pakta/stellar-sdk-wrapper": "workspace:*",
+    "exceljs": "4.4.0",
     "fastify": "5.12.5"
   },
   "devDependencies": {
