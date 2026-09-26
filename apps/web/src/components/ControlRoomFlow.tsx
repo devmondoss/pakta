@@ -1,18 +1,44 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Payable, Vendor } from "@/lib/api";
 import { IntakeFlow } from "@/components/IntakeFlow";
 import { IntakeHistory } from "@/components/IntakeHistory";
 import { PayablesBoard } from "@/components/PayablesBoard";
 import { PipelineOverview } from "@/components/PipelineOverview";
 import { ToastStack } from "@/components/ToastStack";
+import { pushToast } from "@/lib/toast";
 
 type IntakePhase = "idle" | "processing" | "done" | "error";
 
 // Resolución trae varias tarjetas de excepción para leer — se queda más
-// tiempo en pantalla que un paso que es solo una lista o un botón.
-const TOUR_STEP_MS: Record<number, number> = { 1: 1800, 2: 3600, 3: 2200, 4: 2200, 5: 1400 };
+// tiempo en pantalla que un paso que es solo una lista o un botón. Más
+// lento a propósito: la demo necesita tiempo para que se lea el toast de
+// cada etapa antes de saltar a la siguiente.
+const TOUR_STEP_MS: Record<number, number> = { 1: 3200, 2: 6500, 3: 4200, 4: 4200, 5: 2600 };
+
+/** Qué avisar al entrar a cada etapa del tour — el toast que faltaba, porque `notifyTransitions` en PayablesBoard solo dispara ante un cambio real de estado, nunca en la primera pasada. */
+function stageToast(stage: number, payables: Payable[]): { title: string; body: string } | null {
+  const count = (status: Payable["status"]) => payables.filter((p) => p.status === status).length;
+  switch (stage) {
+    case 1:
+      return { title: "Verificación", body: `Evaluando ${payables.length} payable(s) contra las 8 reglas del kernel.` };
+    case 2: {
+      const blocked = count("BLOCKED");
+      return blocked > 0
+        ? { title: "Resolución", body: `${blocked} excepción(es) encontradas — necesitan que alguien actúe.` }
+        : { title: "Resolución", body: "Sin excepciones pendientes en este batch." };
+    }
+    case 3:
+      return { title: "Proof-of-Payable", body: `${count("READY")} payable(s) con proof calculado — proveedor, wallet y monto verificados.` };
+    case 4:
+      return { title: "Settlement", body: `${count("READY")} payable(s) listos para liquidar en Stellar.` };
+    case 5:
+      return { title: "Reconciliación", body: `${count("SETTLED")} settlement(s) esperando confirmación del ERP.` };
+    default:
+      return null;
+  }
+}
 
 /** Qué tan lejos llegó un payable individual en el pipeline. */
 function payableStage(p: Payable): number {
@@ -85,16 +111,33 @@ export function ControlRoomFlow({
   // realmente tomara su tiempo.
   const [viewIndex, setViewIndex] = useState(0);
   const [pinned, setPinned] = useState(false);
+  // Ref, no state: el timer de abajo no debe reiniciarse cada vez que el
+  // poll trae un array nuevo (mismo contenido, otra referencia) — solo
+  // necesita el valor más fresco de `payables` en el instante en que
+  // dispara o en que se hace click, no en cada cambio.
+  const payablesRef = useRef(payables);
+  payablesRef.current = payables;
+
+  // Entrar a una etapa avisa qué hay ahí — sea porque el tour avanzó solo
+  // o porque el usuario clickeó un nodo a mano. Cualquiera de las dos
+  // formas de llegar dispara el mismo toast.
+  function goToStage(i: number) {
+    setViewIndex(i);
+    const toast = stageToast(i, payablesRef.current);
+    if (toast) pushToast(toast.title, toast.body);
+  }
+
   useEffect(() => {
     if (pinned || viewIndex === index) return;
     const next = viewIndex < index ? viewIndex + 1 : index;
-    const id = setTimeout(() => setViewIndex(next), TOUR_STEP_MS[next] ?? 1400);
+    const id = setTimeout(() => goToStage(next), TOUR_STEP_MS[next] ?? 1400);
     return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, pinned, viewIndex]);
 
   function selectStage(i: number) {
     setPinned(true);
-    setViewIndex(i);
+    goToStage(i);
   }
 
   function handlePhaseChange(nextPhase: IntakePhase, stage?: 0 | 1) {
