@@ -341,6 +341,7 @@ export function IntakeFlow({
               );
             })}
           </dl>
+          <p className="intake-model-credit">Leído por NVIDIA Nemotron 3.5 Lightning 30B · vía API NIM</p>
         </div>
       )}
 

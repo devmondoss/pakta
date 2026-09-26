@@ -29,6 +29,7 @@ export function ReasoningTrace({ steps }: { steps: string[] }) {
               <li key={i}>{step}</li>
             ))}
           </ol>
+          <p className="reasoning-trace-engine">Motor: reglas determinísticas — sin modelo de IA</p>
         </div>
       )}
     </div>
