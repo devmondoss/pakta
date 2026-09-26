@@ -2,8 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+import { postAction } from "@/lib/postAction";
 
 export function RevalidateButton({ payableId }: { payableId: string }) {
   const router = useRouter();
@@ -12,8 +11,7 @@ export function RevalidateButton({ payableId }: { payableId: string }) {
   async function revalidate() {
     setPending(true);
     try {
-      await fetch(`${API_URL}/payables/${payableId}/revalidate`, { method: "POST" });
-      router.refresh();
+      if (await postAction(`/payables/${payableId}/revalidate`)) router.refresh();
     } finally {
       setPending(false);
     }

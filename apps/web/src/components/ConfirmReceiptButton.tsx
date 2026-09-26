@@ -2,8 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+import { postAction } from "@/lib/postAction";
 
 export function ConfirmReceiptButton({ payableId }: { payableId: string }) {
   const router = useRouter();
@@ -12,12 +11,7 @@ export function ConfirmReceiptButton({ payableId }: { payableId: string }) {
   async function confirm() {
     setPending(true);
     try {
-      await fetch(`${API_URL}/payables/${payableId}/receipt`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ confirmedBy: "ops@pakta.demo" }),
-      });
-      router.refresh();
+      if (await postAction(`/payables/${payableId}/receipt`, { confirmedBy: "ops@pakta.demo" })) router.refresh();
     } finally {
       setPending(false);
     }

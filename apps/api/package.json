@@ -7,9 +7,11 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
+    "reset-demo": "tsx src/resetDemo.ts",
     "test": "vitest run"
   },
   "dependencies": {
+    "@pakta/ai-extraction": "workspace:*",
     "@fastify/cors": "11.3.0",
     "@fastify/multipart": "10.1.2",
     "@pakta/canonical-model": "workspace:*",

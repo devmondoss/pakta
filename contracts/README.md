@@ -185,23 +185,23 @@ El seed del issuer se pasa por variable de entorno y nunca se escribe en el repo
 | **USDC SAC** | `CAMYM3CR6YM6Y3PUI7NMBJJ3SHWUKDFPRC4C722OOXZG3ZUUFW3ROF5P` |
 | **Initialize tx** | [`e895036e…7c1408`](https://stellar.expert/explorer/testnet/tx/e895036e5657e3c8951c67cb894f7e6e6b037e93ca44de63c034284cad7c1408) |
 | **Upgrade tx** | [`67867c2f…531220`](https://stellar.expert/explorer/testnet/tx/67867c2f3b7f425cc3b614d0ab6569b027890e22d313108581f7a0885b531220) — ejercitado on-chain, estado preservado |
-| **Estado** | Inicializado como vault con caps, fondeado con 80 000 USDC |
+| **Estado** | Inicializado como vault con caps; consulta `get_available` y `get_committed` para el saldo actual |
 
 El gate v3 (`CDKC6UYM…`) se retiró recuperando todo su float (89 000 USDC) con su propio
 `withdraw()` antes de fondear v4: no quedó nada atrapado.
 
-Está sin inicializar a propósito: `initialize` es la llamada que elige el modelo de
-custodia, y esa decisión sigue abierta con el equipo. El contrato ya responde:
+La decisión de custodia del demo es el vault v4. Para consultar su configuración
+sin enviar una transacción, usa el ID vigente del manifiesto:
 
 ```powershell
-stellar contract invoke --id CCF2BKQMKRHOJWUAZPKD72PLWVKHDED6TBOOF7ZJYUXH4OZAOCDLBGON `
-  --source deployer --network testnet -- contract_version
-# -> 2
-
-stellar contract invoke --id CCF2BKQMKRHOJWUAZPKD72PLWVKHDED6TBOOF7ZJYUXH4OZAOCDLBGON `
-  --source deployer --network testnet -- get_config
-# -> Error(Contract, #2)  = NotInitialized, el error tipado viajando correctamente
+stellar contract invoke --id CBTQDZBJYL2JFQAT64OZYFK4PFOA3EG7CMVZ44FCBSAPDE5EXMTACS6S `
+  --source-account GCHMGWSGJS4CNBLWF2SBQVUGAF674RWCT5DFK5QENPVL6UCLAXQT2MVL `
+  --network testnet --send no -- get_config
 ```
+
+`CCF2BKQMKRHOJWUAZPKD72PLWVKHDED6TBOOF7ZJYUXH4OZAOCDLBGON` es el v2
+supersedido. Se conserva únicamente como referencia histórica y no debe usarse
+para registrar ni liquidar payables.
 
 Identificadores completos y versionados en [`../deployments/testnet.json`](../deployments/testnet.json).
 

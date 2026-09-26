@@ -193,6 +193,9 @@ importers:
       '@fastify/multipart':
         specifier: 10.1.2
         version: 10.1.2
+      '@pakta/ai-extraction':
+        specifier: workspace:*
+        version: link:../../packages/ai-extraction
       '@pakta/canonical-model':
         specifier: workspace:*
         version: link:../../packages/canonical-model

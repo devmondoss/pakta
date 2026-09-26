@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { Payable, ProofOfPayable, Vendor } from "@/lib/api";
 import { ConfirmReceiptButton } from "@/components/ConfirmReceiptButton";
 import { RevalidateButton } from "@/components/RevalidateButton";
+import { SettleButton } from "@/components/SettleButton";
 import { StatusBadge, SeverityBadge } from "@/components/StatusBadge";
 import { WalletActions } from "@/components/WalletActions";
 
@@ -54,7 +55,7 @@ function ProofDetail({ payableId }: { payableId: string }) {
   );
 }
 
-export function PayableCard({ payable, vendor }: { payable: Payable; vendor?: Vendor }) {
+export function PayableCard({ payable, vendor, settlementEnabled }: { payable: Payable; vendor?: Vendor; settlementEnabled: boolean }) {
   const [open, setOpen] = useState(false);
   const exception = payable.exception;
 
@@ -102,11 +103,28 @@ export function PayableCard({ payable, vendor }: { payable: Payable; vendor?: Ve
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              <ProofDetail payableId={payable.payableId} />
+              {payable.status === "READY" && <ProofDetail payableId={payable.payableId} />}
+              {payable.status === "READY" && (
+                <SettleButton
+                  payableId={payable.payableId}
+                  vendorName={payable.vendorName}
+                  amount={payable.amount}
+                  enabled={settlementEnabled}
+                />
+              )}
               {payable.settlement && (
                 <div className="flex flex-col gap-1 rounded-xl bg-settled-bg p-3 font-mono text-xs text-settled">
-                  <span>tx_hash: {payable.settlement.txHash}</span>
+                  <a
+                    href={payable.settlement.explorerUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="break-all underline decoration-settled/50 underline-offset-2 hover:decoration-settled"
+                  >
+                    tx_hash: {payable.settlement.txHash}
+                  </a>
                   <span>ledger: {payable.settlement.ledger}</span>
+                  <span className="break-all">proof_hash: {payable.settlement.proofHash}</span>
+                  <span>ERP: {payable.settlement.erpPostingStatus}</span>
                 </div>
               )}
             </div>

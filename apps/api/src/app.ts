@@ -3,12 +3,13 @@ import multipart from "@fastify/multipart";
 import type { Vendor, VendorWallet } from "@pakta/canonical-model";
 import { attestWallet, confirmReceipt, registerWalletChange } from "@pakta/db";
 import { buildProofOfPayable, ProofBuilderError } from "@pakta/proof-builder";
+import { createNvidiaExtractor, type InvoiceExtractor } from "@pakta/ai-extraction";
 import { GateError, SettlementRefused, type Deployment } from "@pakta/settlement";
 import { isAccountId, unitsToDecimal } from "@pakta/stellar-sdk-wrapper";
 import Fastify from "fastify";
 import { getDb } from "./db.js";
 import { evaluateLive } from "./demoData.js";
-import { ingestAndPersist, loadPolicy, seedIfEmpty } from "./ingest.js";
+import { ingestAndPersist, ingestPdfAndPersist, loadPolicy, seedIfEmpty } from "./ingest.js";
 import { toApiPayable, type SettledInfo } from "./mapPayable.js";
 import {
   createSettlementServices,
@@ -24,15 +25,23 @@ export type BuildAppOptions = {
   deployment?: Deployment;
   now?: () => Date;
   logger?: boolean;
+  extractor?: InvoiceExtractor;
 };
+
+function isPdf(filename: string, mimetype: string, buffer: Buffer): boolean {
+  return mimetype === "application/pdf" || filename.toLowerCase().endsWith(".pdf") || buffer.subarray(0, 5).toString() === "%PDF-";
+}
 
 const CHAIN_DISABLED =
   "on-chain settlement is not configured: set PAKTA_ISSUER_SECRET and PAKTA_EXECUTOR_SECRET to enable it";
 
 export async function buildApp(options: BuildAppOptions = {}) {
+  let extractor = options.extractor;
   const app = Fastify({ logger: options.logger ?? true });
   await app.register(cors, { origin: true });
-  await app.register(multipart);
+  // @fastify/multipart defaults to 1 MB — too small for a real exported
+  // invoice PDF. 20 MB covers scanned/multi-page invoices comfortably.
+  await app.register(multipart, { limits: { fileSize: 20 * 1024 * 1024 } });
 
   const db = await getDb();
   await seedIfEmpty(db);
@@ -44,19 +53,31 @@ export async function buildApp(options: BuildAppOptions = {}) {
   });
   const { store, deployment } = settlement;
   /**
-   * The real intake endpoint — an uploaded `.xlsx` goes through
+   * The real intake endpoint. An uploaded `.xlsx` goes through
    * `ingestWorkbook` and every resulting payable gets persisted to
-   * `@pakta/db`. No fixture, no re-derivation: whatever's in the DB
-   * after this call is exactly what `GET /payables` will show.
+   * `@pakta/db`; a `.pdf` goes through AI extraction and is persisted only
+   * if it resolves against a known vendor/PO. No fixture, no
+   * re-derivation: whatever's in the DB after this call is exactly what
+   * `GET /payables` will show.
    */
   app.post("/ingest", async (request, reply) => {
     const file = await request.file();
     if (!file) return reply.code(400).send({ error: "no file uploaded (expected multipart field)" });
 
     const buffer = await file.toBuffer();
+
+    if (isPdf(file.filename, file.mimetype, buffer)) {
+      try {
+        extractor ??= createNvidiaExtractor();
+        return { kind: "pdf", ...(await ingestPdfAndPersist(db, buffer, extractor)) };
+      } catch (err) {
+        request.log.error(err);
+        return reply.code(422).send({ error: `could not extract invoice from PDF: ${(err as Error).message}` });
+      }
+    }
+
     try {
-      const outcome = await ingestAndPersist(db, buffer);
-      return outcome;
+      return { kind: "workbook", ...(await ingestAndPersist(db, buffer)) };
     } catch (err) {
       return reply.code(400).send({ error: `could not parse workbook: ${(err as Error).message}` });
     }

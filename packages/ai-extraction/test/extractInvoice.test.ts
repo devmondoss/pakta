@@ -30,4 +30,15 @@ describe("extractInvoiceFromPdf", () => {
       extractInvoiceFromPdf(Buffer.from("fake-pdf-bytes"), { extractText, extractor }),
     ).rejects.toThrow(/did not match the expected schema/);
   });
+
+  it("treats a null poReference/walletAddress as absent instead of rejecting the extraction", async () => {
+    const extractText = vi.fn().mockResolvedValue("Invoice text goes here");
+    const extractor = vi.fn().mockResolvedValue({ ...validExtraction, poReference: null, walletAddress: null });
+
+    const result = await extractInvoiceFromPdf(Buffer.from("fake-pdf-bytes"), { extractText, extractor });
+
+    expect(result.poReference).toBeUndefined();
+    expect(result.walletAddress).toBeUndefined();
+    expect(result.invoiceId.value).toBe("INV-001");
+  });
 });

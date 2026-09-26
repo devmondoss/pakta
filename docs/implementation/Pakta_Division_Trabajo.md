@@ -1,5 +1,11 @@
 # Pakta — División de trabajo (2 devs)
 
+> **Estado del documento:** plan base del 23 de septiembre de 2026. Las casillas
+> conservan el estado del plan original, no el estado actual de implementación.
+> Para Dev 2, la fuente de estado es `Pakta_Dev2_Checklist.md`; para Dev 1 y
+> testnet, son `contracts/README.md` y `deployments/testnet.json`. Este documento
+> sigue definiendo la separación de responsabilidades y el contrato de datos.
+
 **Versión:** 3.1 — Scrum y vault con caps para el MVP
 **Fecha:** 23 de septiembre de 2026
 **Referencia:** `Pakta_Documento_Maestro.md` (tesis de producto), `Pakta_Plan_Implementacion.md` (stack completo) y `Pakta_Arquitectura_Flujo.md` (diagramas y roadmap)

@@ -79,7 +79,14 @@ export function resolveExtraction(
   }
 
   const vendorWallet = sources.vendorWallets.find((w) => w.vendorId === vendor.vendorId);
-  const walletAddress = extraction.walletAddress?.value ?? vendorWallet?.address;
+  // A low-confidence wallet is dropped, never used: this value is where the
+  // money goes, so a guess (an email the model mislabeled, say) must fall
+  // back to the vendor's attested wallet instead of becoming the payee.
+  const extractedWallet =
+    extraction.walletAddress && extraction.walletAddress.confidence >= minConfidence
+      ? extraction.walletAddress.value
+      : undefined;
+  const walletAddress = extractedWallet ?? vendorWallet?.address;
   if (!walletAddress) {
     return {
       status: "NEEDS_REVIEW",

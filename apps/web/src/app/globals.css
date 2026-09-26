@@ -38,8 +38,8 @@
   --color-settled-bg: var(--settled-bg);
   --color-live: var(--live);
   --color-live-bg: var(--live-bg);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: Arial, Helvetica, sans-serif;
+  --font-mono: "Cascadia Code", Consolas, monospace;
 }
 
 body {
