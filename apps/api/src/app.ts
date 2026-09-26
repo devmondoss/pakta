@@ -4,16 +4,20 @@ import type { Vendor, VendorWallet } from "@pakta/canonical-model";
 import {
   attestWallet,
   confirmReceipt,
+  getPayable,
   listActivity,
   listIntakeRuns,
   logActivity,
   NoSettlementError,
   registerWalletChange,
+  removeKnownFingerprint,
   resetDb,
   updateErpPostingStatus,
+  upsertPayable,
 } from "@pakta/db";
 import { buildProofOfPayable, ProofBuilderError } from "@pakta/proof-builder";
 import { createNvidiaExtractor, type InvoiceExtractor } from "@pakta/ai-extraction";
+import { invoiceFingerprint } from "@pakta/rules-kernel";
 import { GateError, SettlementRefused, type Deployment } from "@pakta/settlement";
 import { isAccountId, unitsToDecimal } from "@pakta/stellar-sdk-wrapper";
 import Fastify from "fastify";
@@ -191,6 +195,65 @@ export async function buildApp(options: BuildAppOptions = {}) {
       return reply.code(404).send({ error: `no payable ${request.params.payableId}` });
     }
     return toApiPayable(payable, result, await settledInfo(payable.payableId));
+  });
+
+  /**
+   * DUPLICATE_INVOICE resolution: AP reviewed the flagged fingerprint and
+   * confirmed this is a legitimate second invoice, not a resend of one
+   * already on file. Clears the fingerprint that blocked it (and anything
+   * else sharing it) instead of special-casing one payable — the fact was
+   * wrong, not just this payable's reading of it.
+   */
+  app.post<{ Params: { payableId: string } }>("/payables/:payableId/dismiss-duplicate", async (request, reply) => {
+    const { payables, results } = await evaluateLive(db, now());
+    const payable = payables.find((p) => p.payableId === request.params.payableId);
+    const result = results.find((r) => r.payableId === request.params.payableId);
+    if (!payable || !result) {
+      return reply.code(404).send({ error: `no payable ${request.params.payableId}` });
+    }
+    if (result.status !== "BLOCKED" || result.primaryException.reason !== "DUPLICATE_INVOICE") {
+      return reply.code(409).send({ error: `${payable.payableId} is not blocked on DUPLICATE_INVOICE` });
+    }
+    await removeKnownFingerprint(db, invoiceFingerprint(payable));
+    await logActivity(db, `Excepción DUPLICATE_INVOICE descartada por AP para ${payable.payableId} — revisado, no es un duplicado`);
+    const revalidated = await evaluateLive(db, now());
+    const fresh = revalidated.payables.find((p) => p.payableId === payable.payableId)!;
+    const freshResult = revalidated.results.find((r) => r.payableId === payable.payableId)!;
+    return toApiPayable(fresh, freshResult, await settledInfo(payable.payableId));
+  });
+
+  /**
+   * PO_AMOUNT_MISMATCH resolution: Procurement amends the PO to match what
+   * was actually invoiced (the other documented fix, a credit note from the
+   * vendor lowering the invoice, isn't something this UI can request).
+   * Persists the corrected PO amount on the payable itself — the same
+   * upsert `POST /ingest` uses, so a correction never needs its own
+   * "delete and re-add" step.
+   */
+  app.post<{ Params: { payableId: string } }>("/payables/:payableId/amend-po", async (request, reply) => {
+    const canonical = await getPayable(db, request.params.payableId);
+    if (!canonical) return reply.code(404).send({ error: `no payable ${request.params.payableId}` });
+    if (!canonical.purchaseOrder) {
+      return reply.code(409).send({ error: `${canonical.payableId} has no purchase order to amend` });
+    }
+
+    const { results } = await evaluateLive(db, now());
+    const result = results.find((r) => r.payableId === canonical.payableId);
+    if (result?.status !== "BLOCKED" || result.primaryException.reason !== "PO_AMOUNT_MISMATCH") {
+      return reply.code(409).send({ error: `${canonical.payableId} is not blocked on PO_AMOUNT_MISMATCH` });
+    }
+
+    const amended = { ...canonical, purchaseOrder: { ...canonical.purchaseOrder, amount: canonical.invoice.amount } };
+    await upsertPayable(db, amended, now());
+    await logActivity(
+      db,
+      `PO ${canonical.purchaseOrder.poId} enmendada por Procurement para ${canonical.payableId} — monto ajustado a ${canonical.invoice.amount}`,
+    );
+
+    const revalidated = await evaluateLive(db, now());
+    const fresh = revalidated.payables.find((p) => p.payableId === canonical.payableId)!;
+    const freshResult = revalidated.results.find((r) => r.payableId === canonical.payableId)!;
+    return toApiPayable(fresh, freshResult, await settledInfo(canonical.payableId));
   });
 
   /**

@@ -45,6 +45,8 @@ sin comprobar el resultado on-chain no es una prueba de liquidación.
 | GET | `/payables` | Payables con estado actualizado |
 | POST | `/payables/:id/revalidate` | Reevaluar un payable |
 | POST | `/payables/:id/receipt` | Confirmar recepción |
+| POST | `/payables/:id/dismiss-duplicate` | Descartar DUPLICATE_INVOICE tras revisión de AP |
+| POST | `/payables/:id/amend-po` | Enmendar la PO al monto facturado (PO_AMOUNT_MISMATCH) |
 | GET | `/vendors` | Proveedores y wallets |
 | POST | `/vendors/:id/wallet` | Registrar nueva wallet sin atestiguar |
 | POST | `/vendors/:id/wallet/attest` | Atestiguar la wallet |

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { Payable, ProofOfPayable, Vendor } from "@/lib/api";
 import { ConfirmReceiptButton } from "@/components/ConfirmReceiptButton";
+import { AmendPoButton, DismissDuplicateButton } from "@/components/ExceptionResolutionActions";
 import { RevalidateButton } from "@/components/RevalidateButton";
 import { SettleButton } from "@/components/SettleButton";
 import { ReconcileButton } from "@/components/SettlementActions";
@@ -12,6 +13,8 @@ import { WalletActions } from "@/components/WalletActions";
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 const WALLET_REASONS = new Set(["VENDOR_WALLET_CHANGED", "UNATTESTED_WALLET"]);
 const RECEIPT_REASONS = new Set(["MISSING_RECEIPT", "PARTIAL_RECEIPT"]);
+const DUPLICATE_REASONS = new Set(["DUPLICATE_INVOICE"]);
+const AMOUNT_REASONS = new Set(["PO_AMOUNT_MISMATCH"]);
 
 function ChevronIcon({ open }: { open: boolean }) {
   return (
@@ -104,6 +107,8 @@ export function PayableCard({ payable, vendor, settlementEnabled }: { payable: P
                   <WalletActions vendorId={payable.vendorId} attestationStatus={vendor?.wallet?.attestationStatus} />
                 )}
                 {RECEIPT_REASONS.has(exception.reason) && <ConfirmReceiptButton payableId={payable.payableId} />}
+                {DUPLICATE_REASONS.has(exception.reason) && <DismissDuplicateButton payableId={payable.payableId} />}
+                {AMOUNT_REASONS.has(exception.reason) && <AmendPoButton payableId={payable.payableId} />}
                 <RevalidateButton payableId={payable.payableId} />
               </div>
             </div>

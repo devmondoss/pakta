@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { Payable, Vendor } from "@/lib/api";
 import { IntakeFlow } from "@/components/IntakeFlow";
 import { IntakeHistory } from "@/components/IntakeHistory";
+import { NotificationsToggle } from "@/components/NotificationsToggle";
 import { PayablesBoard } from "@/components/PayablesBoard";
 import { PipelineOverview } from "@/components/PipelineOverview";
 import { SummaryStrip } from "@/components/SummaryStrip";
@@ -75,6 +76,11 @@ export function ControlRoomFlow({
 
   return (
     <div className="flex flex-col gap-10">
+      {hasActed && (
+        <div className="flex justify-end">
+          <NotificationsToggle />
+        </div>
+      )}
       <PipelineOverview activeIndex={index} finished={finished} />
       {hasActed && <SummaryStrip payables={payables} />}
       <div className="control-panel p-3 sm:p-4">
