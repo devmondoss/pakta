@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PlayCircle } from "lucide-react";
 
@@ -15,47 +15,14 @@ const WORKBOOK_STEPS = [
   "Generando resultados",
 ];
 
-const PDF_STEPS = [
-  "Extrayendo el texto del PDF",
-  "La IA lee la factura",
-  "Validando contra proveedores y POs registrados",
-  "Generando resultados",
-];
-
-type ExtractedField = { value: string; confidence: number; sourceExcerpt: string };
-
-type IngestResult =
-  | {
-      kind: "workbook";
-      ingested: number;
-      rejectedRows: { sheet: string; rowNumber: number; errors: string[] }[];
-      /** Solo presente cuando vino de "Probar con un caso real" (`POST /demo/reset`), no de un upload real. */
-      variantLabel?: string;
-      invoices?: { invoiceId: string; vendorName: string; amount: string }[];
-    }
-  | {
-      kind: "pdf";
-      status: "CANDIDATE" | "NEEDS_REVIEW";
-      payableId?: string;
-      reason?: string;
-      extraction: Record<string, ExtractedField | undefined>;
-    };
-
-const EXTRACTED_LABELS: [key: string, label: string][] = [
-  ["vendorName", "Proveedor"],
-  ["invoiceId", "Factura"],
-  ["amount", "Monto"],
-  ["dueDate", "Vence"],
-  ["poReference", "PO"],
-  ["walletAddress", "Wallet"],
-];
-
-/** Mirrors `resolveExtraction`'s default threshold in @pakta/ai-extraction. */
-const MIN_CONFIDENCE = 0.7;
-
-function isPdfFile(file: File) {
-  return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
-}
+type IngestResult = {
+  kind: "workbook";
+  ingested: number;
+  rejectedRows: { sheet: string; rowNumber: number; errors: string[] }[];
+  /** Siempre presente — este flujo solo carga datasets de prueba (`POST /demo/reset`), nunca un upload real. */
+  variantLabel?: string;
+  invoices?: { invoiceId: string; vendorName: string; amount: string }[];
+};
 
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -66,26 +33,21 @@ export function IntakeFlow({
 }: {
   /**
    * `stage` solo importa mientras `phase === "processing"`: los primeros
-   * pasos ("Leyendo el archivo"/"Extrayendo texto") todavía son trabajo de
-   * Intake (0); los últimos ("Aplicando las 8 reglas"/"Validando…") ya son
-   * Verificación (1) — así el flujograma macro se enciende en el nodo
-   * correcto en vez de saltar directo a Verificación apenas se suelta el
-   * archivo.
+   * pasos ("Leyendo el archivo") todavía son trabajo de Intake (0); los
+   * últimos ("Aplicando las 8 reglas") ya son Verificación (1) — así el
+   * flujograma macro se enciende en el nodo correcto en vez de saltar
+   * directo a Verificación apenas termina de cargar.
    */
   onPhaseChange?: (phase: FlowState, stage?: 0 | 1) => void;
 }) {
   const router = useRouter();
   const [state, setState] = useState<FlowState>("idle");
-  const [fileName, setFileName] = useState("");
-  const [steps, setSteps] = useState(WORKBOOK_STEPS);
+  const [steps] = useState(WORKBOOK_STEPS);
   const [stepIndex, setStepIndex] = useState(0);
   const [result, setResult] = useState<IngestResult | null>(null);
   const [error, setError] = useState("");
-  const [dragOver, setDragOver] = useState(false);
   const [showVariants, setShowVariants] = useState(false);
-  const [showUpload, setShowUpload] = useState(false);
   const [variants, setVariants] = useState<{ index: number; label: string }[] | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   // Se piden solo al abrir el picker por primera vez, no en cada render
   // — el mismo patrón que `PolicyInfo` usa para `/policy`.
@@ -106,23 +68,24 @@ export function IntakeFlow({
   }, [state, stepIndex, steps.length, onPhaseChange]);
 
   /**
-   * Corre la animación de pasos (WORKBOOK_STEPS/PDF_STEPS) mientras espera
-   * el resultado real de `requestFn` — nunca al revés. Compartido por
-   * `ingest()` (archivo real) y `loadDemoData()` (reset + seed del backend)
-   * para no duplicar el manejo de estado/errores entre los dos caminos.
+   * No re-sube ningún archivo: pide al backend que wipee la DB y reseede
+   * la variante elegida por el usuario en el picker (`POST /demo/reset`
+   * con `variantIndex`), incluyendo el hecho externo (fingerprint previo
+   * de INV-002) que un simple re-upload del xlsx no puede reproducir. Así
+   * el batch siempre reproduce el 1 READY + 4 BLOCKED canónico, sin
+   * importar qué haya quedado de un ensayo anterior.
+   *
+   * Cada paso se queda visible un rato — la demo existe para enseñar que
+   * hay verificaciones corriendo, así que no puede resolverse de un
+   * parpadeo aunque la API real responda en milisegundos.
    */
-  async function runIngest(flowSteps: string[], label: string, requestFn: () => Promise<IngestResult>) {
-    setSteps(flowSteps);
-    setFileName(label);
+  async function loadDemoData(variantIndex: number) {
     setState("processing");
     setStepIndex(0);
     setError("");
 
-    // Cada paso se queda visible un rato — la demo existe para enseñar que
-    // hay verificaciones corriendo, así que no puede resolverse de un
-    // parpadeo aunque la API real responda en milisegundos.
     const revealSteps = (async () => {
-      for (let i = 0; i < flowSteps.length - 1; i++) {
+      for (let i = 0; i < steps.length - 1; i++) {
         await wait(1300);
         setStepIndex(i + 1);
       }
@@ -131,13 +94,22 @@ export function IntakeFlow({
     try {
       const [, outcome] = await Promise.all([
         revealSteps,
-        requestFn().catch((err: Error) => {
+        (async () => {
+          const res = await fetch(`${API_URL}/demo/reset`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ variantIndex }),
+          });
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(body.error ?? `La API respondió ${res.status}`);
+          return body as IngestResult;
+        })().catch((err: Error) => {
           // fetch() rejects with a bare TypeError when the API is down —
           // say that instead of "Failed to fetch".
           throw err instanceof TypeError ? new Error("No se pudo conectar con la API. ¿Está corriendo en el puerto 4000?") : err;
         }),
       ]);
-      setStepIndex(flowSteps.length);
+      setStepIndex(steps.length);
       await wait(1000);
       setResult(outcome);
       setState("done");
@@ -149,52 +121,8 @@ export function IntakeFlow({
     }
   }
 
-  /**
-   * No re-sube ningún archivo: pide al backend que wipee la DB y reseede
-   * la variante elegida por el usuario en el picker (`POST /demo/reset`
-   * con `variantIndex`), incluyendo el hecho externo (fingerprint previo
-   * de INV-002) que un simple re-upload del xlsx no puede reproducir. Así
-   * el batch siempre reproduce el 1 READY + 4 BLOCKED canónico, sin
-   * importar qué haya quedado de un ensayo anterior o de una factura real
-   * con datos insuficientes.
-   */
-  async function loadDemoData(variantIndex: number) {
-    await runIngest(WORKBOOK_STEPS, "Caso de prueba", async () => {
-      const res = await fetch(`${API_URL}/demo/reset`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ variantIndex }),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.error ?? `La API respondió ${res.status}`);
-      return body as IngestResult;
-    });
-  }
-
-  async function ingest(file: File) {
-    const pdf = isPdfFile(file);
-    if (!pdf && !file.name.toLowerCase().endsWith(".xlsx")) {
-      setFileName(file.name);
-      setError("Formato no soportado. Subí un workbook .xlsx o una factura .pdf.");
-      setState("error");
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append("file", file);
-
-    await runIngest(pdf ? PDF_STEPS : WORKBOOK_STEPS, file.name, async () => {
-      const res = await fetch(`${API_URL}/ingest`, { method: "POST", body: formData });
-      if (res.status === 413) throw new Error("El archivo supera el límite de 20 MB.");
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.error ?? `La API respondió ${res.status}`);
-      return body as IngestResult;
-    });
-  }
-
   function reset() {
     setState("idle");
-    setFileName("");
     setStepIndex(0);
     setResult(null);
     setError("");
@@ -206,11 +134,7 @@ export function IntakeFlow({
         <div className="intake-primary">
           <p className="intake-primary-label">Empezá la demo</p>
           <div className="relative flex justify-center">
-            <button
-              type="button"
-              onClick={() => setShowVariants((v) => !v)}
-              className="intake-primary-cta"
-            >
+            <button type="button" onClick={() => setShowVariants((v) => !v)} className="intake-primary-cta">
               <PlayCircle size={18} strokeWidth={2.2} />
               Cargar dataset de prueba
             </button>
@@ -240,43 +164,6 @@ export function IntakeFlow({
               </div>
             )}
           </div>
-
-          <button type="button" onClick={() => setShowUpload((v) => !v)} className="intake-secondary-link">
-            {showUpload ? "Ocultar" : "o subí tu propio .xlsx / factura .pdf (lectura con IA)"}
-          </button>
-
-          {showUpload && (
-            <div
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragOver(true);
-              }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setDragOver(false);
-                const file = e.dataTransfer.files[0];
-                if (file) ingest(file);
-              }}
-              onClick={() => inputRef.current?.click()}
-              className={`intake-dropzone intake-dropzone-compact cursor-pointer ${dragOver ? "intake-dropzone-active" : ""}`}
-            >
-              <input
-                ref={inputRef}
-                type="file"
-                accept=".xlsx,.pdf"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) ingest(file);
-                }}
-              />
-              <div>
-                <p>Arrastrá un workbook o una factura acá, o <mark>elegí un archivo</mark></p>
-                <p className="mt-1 font-mono text-[10px]">.xlsx con VENDORS, PO, INVOICES, RECEIPTS, APPROVALS · .pdf de una factura (lectura con IA)</p>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -300,59 +187,12 @@ export function IntakeFlow({
         </div>
       )}
 
-      {state === "done" && result?.kind === "pdf" && (
-        <div className="intake-state">
-          <div className="intake-result-head">
-            <p className="text-sm">
-              {result.status === "CANDIDATE" ? (
-                <>
-                  <span className="text-ready">Listo.</span> {fileName} — la IA leyó la factura y coincide con un
-                  proveedor y PO registrados. Quedó cargada como {result.payableId}.
-                </>
-              ) : (
-                <>
-                  <span className="text-live">Requiere revisión.</span> {fileName} — la IA leyó la factura, pero no
-                  se cargó: {result.reason}
-                </>
-              )}
-            </p>
-            <button onClick={reset} className="intake-reset shrink-0">
-              Cargar otro
-            </button>
-          </div>
-          <dl className="intake-fields grid grid-cols-1 gap-x-6 gap-y-2 text-xs sm:grid-cols-2">
-            {EXTRACTED_LABELS.map(([key, label]) => {
-              const field = result.extraction[key];
-              if (!field) return null;
-              // Below the guardrail's threshold the value is ignored by the
-              // backend — show it as such instead of as if it were real data.
-              const trusted = field.confidence >= MIN_CONFIDENCE;
-              return (
-                <div key={key} className="flex items-baseline justify-between gap-3">
-                  <dt className="text-muted">{label}</dt>
-                  <dd
-                    className={`truncate font-mono ${trusted ? "text-foreground" : "text-muted line-through"}`}
-                    title={field.sourceExcerpt}
-                  >
-                    {field.value}{" "}
-                    <span className={trusted ? "text-muted" : "text-live no-underline"}>
-                      · {Math.round(field.confidence * 100)}%{trusted ? "" : " — descartado"}
-                    </span>
-                  </dd>
-                </div>
-              );
-            })}
-          </dl>
-          <p className="intake-model-credit">Leído por NVIDIA Nemotron 3.5 Lightning 30B · vía API NIM</p>
-        </div>
-      )}
-
-      {state === "done" && result?.kind === "workbook" && (
+      {state === "done" && result && (
         <div className="intake-state">
           <div className="intake-result-head">
             <p className="text-sm">
               <span className="text-ready">Listo.</span>{" "}
-              {result.variantLabel ? `Caso — ${result.variantLabel}` : fileName} — {result.ingested}{" "}
+              {result.variantLabel ? `Caso — ${result.variantLabel}` : "Dataset de prueba"} — {result.ingested}{" "}
               payables ingestados de verdad, persistidos en la base.
             </p>
             <button onClick={reset} className="intake-reset shrink-0">
