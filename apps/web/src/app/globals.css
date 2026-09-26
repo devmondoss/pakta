@@ -166,6 +166,8 @@ body { background: var(--background); color: var(--foreground); font-family: var
 /* Avisos in-app: reemplazan el push nativo del navegador, aparecen dentro de la UI. */
 .toast-stack { position: fixed; right: 1.25rem; bottom: 1.25rem; z-index: 50; display: flex; flex-direction: column; gap: .6rem; width: min(320px, calc(100vw - 2rem)); }
 .toast-card { position: relative; padding: .85rem 2.1rem .85rem 1rem; border: 1.6px solid #181713; border-radius: 1rem; background: #fbf8f0; box-shadow: 5px 5px 0 #181713; animation: toast-in .25s ease-out; }
+.toast-card-error { border-color: #aa5040; background: #fff0e9; box-shadow: 5px 5px 0 #8f3e30; }
+.toast-card-error .toast-title { color: #7f291e; }
 .toast-title { margin: 0 0 .2rem; font-size: .82rem; font-weight: 700; letter-spacing: -.01em; }
 .toast-body { margin: 0; color: var(--muted); font-size: .74rem; line-height: 1.4; }
 .toast-dismiss { position: absolute; top: .45rem; right: .55rem; width: 1.3rem; height: 1.3rem; display: grid; place-items: center; border: none; background: none; color: var(--muted); font-size: 1rem; line-height: 1; cursor: pointer; }

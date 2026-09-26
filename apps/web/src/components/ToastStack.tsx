@@ -18,7 +18,7 @@ export function ToastStack() {
   return (
     <div className="toast-stack">
       {toasts.map((toast) => (
-        <div key={toast.id} className="toast-card" role="status">
+        <div key={toast.id} className={`toast-card toast-card-${toast.tone}`} role={toast.tone === "error" ? "alert" : "status"}>
           <button
             type="button"
             className="toast-dismiss"

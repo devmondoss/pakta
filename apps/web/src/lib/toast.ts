@@ -1,4 +1,5 @@
-export type Toast = { id: number; title: string; body: string };
+export type ToastTone = "success" | "error";
+export type Toast = { id: number; title: string; body: string; tone: ToastTone };
 
 type Listener = (toasts: Toast[]) => void;
 
@@ -17,9 +18,9 @@ export function subscribeToasts(listener: Listener): () => void {
 }
 
 /** Aviso in-app — vive dentro de la UI, no depende de ningún permiso del navegador. */
-export function pushToast(title: string, body: string): void {
+export function pushToast(title: string, body: string, tone: ToastTone = "success"): void {
   const id = nextId++;
-  toasts = [...toasts, { id, title, body }];
+  toasts = [...toasts, { id, title, body, tone }];
   emit();
   setTimeout(() => dismissToast(id), 6000);
 }
