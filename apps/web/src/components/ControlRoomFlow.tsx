@@ -10,16 +10,30 @@ import { SummaryStrip } from "@/components/SummaryStrip";
 
 type IntakePhase = "idle" | "processing" | "done" | "error";
 
+/** Qué tan lejos llegó un payable individual en el pipeline. */
+function payableStage(p: Payable): number {
+  if (p.status === "BLOCKED") return 2; // Resolución
+  // El proof ya está calculado en cuanto el payable es READY (se deriva
+  // en vivo, no es un paso que quede pendiente por su cuenta) — lo que
+  // falta de verdad es el settlement.
+  if (p.status === "READY") return 4;
+  return 5; // SETTLED, reconciliado o no — de cualquier forma ya llegó al final del pipeline.
+}
+
 /**
- * El bottleneck real del batch: el nodo más a la izquierda que todavía
- * tiene trabajo pendiente. Así el flujograma muestra un único paso
- * "encendido" — el que de verdad se está ejecutando ahora — en vez de
- * un conteo por etapa.
+ * El nodo que se enciende es el más avanzado que alcanzó CUALQUIER
+ * payable del batch — no el más atrasado. Un batch real procesa varios
+ * payables en paralelo: dos de las cuatro excepciones canónicas
+ * (DUPLICATE_INVOICE, PO_AMOUNT_MISMATCH) no tienen ninguna acción de
+ * resolución en esta UI, así que esos payables se quedan BLOCKED para
+ * siempre. Si el pipeline exigiera que *todos* salgan de Resolución antes
+ * de mostrar Proof-of-Payable/Settlement/Reconciliación, esas etapas
+ * jamás se verían en la demo — quedaba atascado ahí sin ninguna salida.
  *
  * Solo se consulta una vez que esta sesión hizo algo (`hasActed`) —
- * mientras nadie tocó nada, mostrar el bottleneck de datos que ya
- * estaban en la base (de una sesión anterior) contradice lo que la
- * pantalla de Intake, vacía, está mostrando ahora mismo.
+ * mientras nadie tocó nada, mostrar el progreso de datos que ya estaban
+ * en la base (de una sesión anterior) contradice lo que la pantalla de
+ * Intake, vacía, está mostrando ahora mismo.
  */
 function computeStage(
   phase: IntakePhase,
@@ -35,15 +49,9 @@ function computeStage(
   if (phase === "processing") return { index: processingStage, finished: false };
   if (payables.length === 0) return { index: 0, finished: false }; // nada cargado todavía
 
-  if (payables.some((p) => p.status === "BLOCKED")) return { index: 2, finished: false };
-  // El proof ya está calculado en cuanto el payable es READY (se deriva
-  // en vivo, no es un paso que quede pendiente por su cuenta) — lo que
-  // falta de verdad es el settlement.
-  if (payables.some((p) => p.status === "READY")) return { index: 4, finished: false };
-  if (payables.some((p) => p.status === "SETTLED" && p.settlement?.erpPostingStatus !== "RECONCILED")) {
-    return { index: 5, finished: false };
-  }
-  return { index: 5, finished: true }; // todo settled y reconciliado
+  const index = Math.max(...payables.map(payableStage));
+  const finished = payables.every((p) => p.status === "SETTLED" && p.settlement?.erpPostingStatus === "RECONCILED");
+  return { index, finished };
 }
 
 export function ControlRoomFlow({
