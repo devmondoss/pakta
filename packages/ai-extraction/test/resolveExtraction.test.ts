@@ -119,4 +119,18 @@ describe("resolveExtraction", () => {
       expect(kernelResult.exceptions.map((e) => e.reason)).toContain("VENDOR_WALLET_CHANGED");
     }
   });
+
+  it("ignores a low-confidence extracted wallet and falls back to the vendor's attested wallet", () => {
+    const result = resolveExtraction(
+      goodExtraction({
+        walletAddress: { value: "billing@vendor.example", confidence: 0.4, sourceExcerpt: "billing@vendor.example" },
+      }),
+      sources,
+      { policyVersion: "FIN-4.2" },
+    );
+
+    expect(result.status).toBe("CANDIDATE");
+    if (result.status !== "CANDIDATE") return;
+    expect(result.payable.invoice.walletAddress).toBe(vendorWallet.address);
+  });
 });

@@ -29,7 +29,10 @@ export const InvoiceExtraction = z.object({
   invoiceId: extractedField(z.string().min(1)),
   amount: extractedField(decimalString),
   dueDate: extractedField(z.string().min(1)),
-  poReference: extractedField(z.string().min(1)).optional(),
-  walletAddress: extractedField(z.string().min(1)).optional(),
+  // The prompt says to omit these when absent, but models routinely send
+  // `null` instead — same meaning, so normalize it rather than reject the
+  // whole extraction.
+  poReference: extractedField(z.string().min(1)).nullish().transform((v) => v ?? undefined),
+  walletAddress: extractedField(z.string().min(1)).nullish().transform((v) => v ?? undefined),
 });
 export type InvoiceExtraction = z.infer<typeof InvoiceExtraction>;

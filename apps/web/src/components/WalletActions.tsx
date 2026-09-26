@@ -2,8 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+import { postAction } from "@/lib/postAction";
 
 export function WalletActions({
   vendorId,
@@ -21,12 +20,7 @@ export function WalletActions({
 
     setPending("register");
     try {
-      await fetch(`${API_URL}/vendors/${vendorId}/wallet`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ address }),
-      });
-      router.refresh();
+      if (await postAction(`/vendors/${vendorId}/wallet`, { address })) router.refresh();
     } finally {
       setPending(null);
     }
@@ -35,8 +29,7 @@ export function WalletActions({
   async function attestWallet() {
     setPending("attest");
     try {
-      await fetch(`${API_URL}/vendors/${vendorId}/wallet/attest`, { method: "POST" });
-      router.refresh();
+      if (await postAction(`/vendors/${vendorId}/wallet/attest`)) router.refresh();
     } finally {
       setPending(null);
     }

@@ -35,7 +35,7 @@ describe("POST /ingest — the real intake path (no fixture re-derivation)", () 
 
     const res = await app.inject({ method: "POST", url: "/ingest", payload, headers });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toMatchObject({ ingested: 5, rejectedRows: [] });
+    expect(res.json()).toMatchObject({ kind: "workbook", ingested: 5, rejectedRows: [] });
 
     const payables = await app.inject({ method: "GET", url: "/payables" });
     expect(payables.json()).toHaveLength(5);
@@ -67,5 +67,54 @@ describe("POST /ingest — the real intake path (no fixture re-derivation)", () 
     const { payload, headers } = multipartBody("file", "not-a-workbook.txt", Buffer.from("hello, this is not an xlsx"));
     const res = await app.inject({ method: "POST", url: "/ingest", payload, headers });
     expect(res.statusCode).toBe(400);
+  });
+});
+
+describe("POST /ingest — PDF invoices go through AI extraction, not the workbook parser", () => {
+  const pdfPath = path.resolve(import.meta.dirname, "../../../fixtures/demo-invoices/invoice-1-simple-list.pdf");
+  const field = (value: string) => ({ value, confidence: 0.95, sourceExcerpt: value });
+
+  async function uploadPdf(extraction: unknown) {
+    const pdfApp = await buildApp({ extractor: async () => extraction });
+    const { payload, headers } = multipartBody("file", "invoice.pdf", readFileSync(pdfPath));
+    return pdfApp.inject({ method: "POST", url: "/ingest", payload, headers });
+  }
+
+  it("persists a PDF whose vendor and PO match the system's records", async () => {
+    const res = await uploadPdf({
+      vendorName: field("CloudData Inc."),
+      invoiceId: field("INV-PDF-001"),
+      amount: field("5000.00"),
+      dueDate: field("2026-10-15"),
+      poReference: field("PO-72881"),
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ kind: "pdf", status: "CANDIDATE", payableId: "PAY-INV-PDF-001" });
+
+    const payables = await app.inject({ method: "GET", url: "/payables" });
+    expect(payables.json().map((p: { payableId: string }) => p.payableId)).toContain("PAY-INV-PDF-001");
+  });
+
+  it("returns NEEDS_REVIEW with the extraction when the PO isn't on file, and persists nothing", async () => {
+    const before = (await app.inject({ method: "GET", url: "/payables" })).json().length;
+    const res = await uploadPdf({
+      vendorName: field("CloudData Inc."),
+      invoiceId: field("INV-PDF-002"),
+      amount: field("12450.00"),
+      dueDate: field("2026-10-15"),
+      poReference: field("PO-88213"),
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ kind: "pdf", status: "NEEDS_REVIEW", extraction: { invoiceId: { value: "INV-PDF-002" } } });
+    expect(res.json().reason).toMatch(/^PO_NOT_FOUND/);
+    expect((await app.inject({ method: "GET", url: "/payables" })).json()).toHaveLength(before);
+  });
+
+  it("422s when the AI output doesn't match the extraction schema", async () => {
+    const res = await uploadPdf({ vendorName: "not a field object" });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error).toMatch(/could not extract invoice from PDF/);
   });
 });

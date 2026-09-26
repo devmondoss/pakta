@@ -26,7 +26,17 @@ fences, matching exactly this shape:
 
 "sourceExcerpt" must be the exact text from the document that the value came
 from. If a field is not present in the document, omit that key entirely
-rather than guessing a value.`;
+rather than guessing a value.
+
+Field rules:
+- "dueDate": always ISO format YYYY-MM-DD, whatever format the document uses.
+- "amount": the total amount due, as a plain decimal.
+- "poReference": ONLY a purchase order identifier explicitly labeled as such
+  (e.g. "PO-72881", "OC-55210"). An address, a name, a sentence, or text
+  saying no PO exists is NOT a PO — omit the key.
+- "walletAddress": ONLY a blockchain payout address explicitly given for
+  payment (Stellar addresses start with "G"). An email, bank account, IBAN,
+  phone number or URL is NOT a wallet — omit the key.`;
 
 export function parseJsonResponse(content: string): unknown {
   // Models occasionally wrap JSON in ```json fences despite instructions not to.
@@ -64,7 +74,9 @@ export function createNvidiaExtractor(opts?: { apiKey?: string; model?: string }
     throw new Error("NVIDIA_API_KEY is not set — get one at https://build.nvidia.com");
   }
 
-  const client = new OpenAI({ apiKey, baseURL: NVIDIA_BASE_URL });
+  // Bounded on purpose: the SDK's defaults (10 min per request, 2 retries)
+  // meant one slow NIM response could hang an upload for half an hour.
+  const client = new OpenAI({ apiKey, baseURL: NVIDIA_BASE_URL, timeout: 60_000, maxRetries: 1 });
   const model = opts?.model ?? DEFAULT_MODEL;
 
   return async function extractWithNvidia(invoiceText: string): Promise<unknown> {
@@ -81,7 +93,15 @@ export function createNvidiaExtractor(opts?: { apiKey?: string; model?: string }
     const MAX_ATTEMPTS = 3;
 
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-      const completion = await client.chat.completions.create({ model, temperature: 0, messages });
+      // Nemotron is a reasoning model: left on, it "thinks" for minutes
+      // before answering. Extraction is a lookup, not a puzzle — the
+      // confidence scores and sourceExcerpt already carry the audit trail.
+      const completion = await client.chat.completions.create({
+        model,
+        temperature: 0,
+        messages,
+        ...({ chat_template_kwargs: { enable_thinking: false } } as object),
+      });
       const content = completion.choices[0]?.message.content ?? "";
 
       try {

@@ -1,6 +1,23 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { addKnownFingerprint, countPayables, seedReceiptIfAbsent, seedWalletIfAbsent, upsertPayable, type Db } from "@pakta/db";
+import {
+  extractInvoiceFromPdf,
+  resolveExtraction,
+  type InvoiceExtraction,
+  type InvoiceExtractor,
+  type KnownSources,
+} from "@pakta/ai-extraction";
+import {
+  addKnownFingerprint,
+  countPayables,
+  getReceipt,
+  getWallet,
+  listPayables,
+  seedReceiptIfAbsent,
+  seedWalletIfAbsent,
+  upsertPayable,
+  type Db,
+} from "@pakta/db";
 import { ingestWorkbook, type RejectedRow } from "@pakta/ingestion";
 import { loadPolicyFromYaml } from "@pakta/rules-kernel";
 import type { Policy } from "@pakta/canonical-model";
@@ -42,6 +59,63 @@ export async function ingestAndPersist(db: Db, workbookBuffer: Buffer): Promise<
   }
 
   return { ingested: payables.length, rejectedRows };
+}
+
+export type PdfIngestOutcome = {
+  extraction: InvoiceExtraction;
+  status: "CANDIDATE" | "NEEDS_REVIEW";
+  payableId?: string;
+  reason?: string;
+};
+
+/**
+ * The system's own records, for `resolveExtraction` to match an AI
+ * extraction against — built from what's already persisted (every
+ * ingested payable carries its vendor, PO, receipts and approvals), with
+ * wallets and receipts read live from the DB so a re-attested address or
+ * a newly confirmed receipt wins over the copy stored on the payable.
+ */
+async function knownSources(db: Db): Promise<KnownSources> {
+  const payables = await listPayables(db);
+  const unique = <T>(items: T[], key: (item: T) => string) => [...new Map(items.map((i) => [key(i), i])).values()];
+
+  const vendors = unique(payables.map((p) => p.vendor), (v) => v.vendorId);
+  const vendorWallets = (await Promise.all(vendors.map((v) => getWallet(db, v.vendorId)))).filter((w) => w !== undefined);
+
+  const purchaseOrders = unique(payables.flatMap((p) => (p.purchaseOrder ? [p.purchaseOrder] : [])), (po) => po.poId);
+  const receipts = (await Promise.all(purchaseOrders.map((po) => getReceipt(db, po.poId)))).filter((r) => r !== undefined);
+
+  return {
+    vendors,
+    vendorWallets,
+    purchaseOrders,
+    receipts,
+    approvals: unique(payables.flatMap((p) => p.approvals), (a) => `${a.objectType}|${a.objectId}|${a.approverId}`),
+  };
+}
+
+/**
+ * The PDF half of `POST /ingest`: the AI reads the invoice, and
+ * `resolveExtraction` decides whether it matches a vendor/PO the system
+ * already knows. Only a CANDIDATE is persisted — a NEEDS_REVIEW comes
+ * back with the extraction and the reason, so a human can see exactly
+ * what the AI read and why it wasn't trusted.
+ */
+export async function ingestPdfAndPersist(
+  db: Db,
+  pdfBuffer: Buffer,
+  extractor: InvoiceExtractor,
+): Promise<PdfIngestOutcome> {
+  const policy = await loadPolicy();
+  const extraction = await extractInvoiceFromPdf(pdfBuffer, { extractor });
+  const resolved = resolveExtraction(extraction, await knownSources(db), { policyVersion: policy.policyVersion });
+
+  if (resolved.status === "NEEDS_REVIEW") {
+    return { extraction, status: "NEEDS_REVIEW", reason: resolved.reason };
+  }
+
+  await upsertPayable(db, resolved.payable, new Date());
+  return { extraction, status: "CANDIDATE", payableId: resolved.payable.payableId };
 }
 
 /**
