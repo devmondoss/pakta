@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { AnimatePresence } from "motion/react";
 import type { Payable, Vendor } from "@/lib/api";
 import { IntakeFlow } from "@/components/IntakeFlow";
 import { IntakeHistory } from "@/components/IntakeHistory";
@@ -157,8 +158,11 @@ export function ControlRoomFlow({
   return (
     <div className="flex flex-col gap-10">
       <ToastStack />
-      {intro && <StageIntro title={intro.title} body={intro.body} onDismiss={() => setIntroStage(null)} />}
-      <PipelineOverview activeIndex={index} viewIndex={viewIndex} finished={finished} onSelect={selectStage} />
+      <AnimatePresence>
+        {intro && <StageIntro key="stage-intro" title={intro.title} body={intro.body} onDismiss={() => setIntroStage(null)} />}
+      </AnimatePresence>
+      {/* Mientras el tour camina solo, el punto pulsante sigue lo que se está narrando (`viewIndex`), no el progreso real crudo — si `index` salta adelante mientras el overlay todavía explica una etapa anterior, se ven dos "ahora" distintos a la vez. Una vez que el usuario toma el control (`pinned`), vuelve a mostrar el progreso real. */}
+      <PipelineOverview activeIndex={pinned ? index : viewIndex} viewIndex={viewIndex} finished={finished} onSelect={selectStage} />
       {working && (
         <p className="stage-working">
           <span className="stage-working-dot" aria-hidden />
