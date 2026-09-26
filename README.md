@@ -8,6 +8,32 @@ Pakta convierte el flujo financiero real de una PyME —Excel, PDFs, email, apps
 
 ---
 
+## Entregable para la hackathon
+
+### Problema que resuelve
+
+Una PyME puede tener una factura, orden de compra y aprobación aparentemente válidas, pero todavía pagar dos veces, pagar un monto equivocado o enviar fondos a una wallet de proveedor que cambió sin verificar. Pakta reúne esas evidencias, bloquea obligaciones con excepciones concretas y solo autoriza el pago cuando el payable está listo.
+
+### ¿Cómo usa Stellar?
+
+El contrato Soroban [`PayableGate`](contracts/payable-contract/src/lib.rs) controla el settlement en Stellar. Un issuer firma el **Proof-of-Payable**; `register_payable` comprueba la firma y fija en cadena el destinatario, activo, monto, vencimiento y hash del proof. Luego, el executor llama `settle(payable_id)`: esa función no acepta un destinatario ni un monto nuevos y transfiere exactamente lo registrado desde un vault con límites. La API enlaza la transacción y los eventos con la factura para reconciliación. El activo de esta demostración es **USDC de prueba emitido por Pakta**, no USDC de Circle ni dinero real.
+
+### GitHub y evidencia on-chain (testnet)
+
+- **GitHub:** [github.com/devmondoss/pakta](https://github.com/devmondoss/pakta)
+- **Licencia:** [MIT](LICENSE), visible en la raíz del repositorio.
+- **Contrato PayableGate v4:** `CBTQDZBJYL2JFQAT64OZYFK4PFOA3EG7CMVZ44FCBSAPDE5EXMTACS6S`
+- **Inicialización de v4:** [`e895036e…cad7c1408`](https://horizon-testnet.stellar.org/transactions/e895036e5657e3c8951c67cb894f7e6e6b037e93ca44de63c034284cad7c1408)
+- **Actualización a v4:** [`67867c2f…d65b531220`](https://horizon-testnet.stellar.org/transactions/67867c2f3b7f425cc3b614d0ab6569b027890e22d313108581f7a0885b531220)
+- **Fondeo del vault:** [`74f1eba3…22ec9cb`](https://horizon-testnet.stellar.org/transactions/74f1eba311eb89057df57a02c6a6381419fbaafc3933d07dfc1ad6db322ec9cb)
+- **Manifiesto público:** [`deployments/testnet.json`](deployments/testnet.json), con ID, red, hash WASM y hashes de transacciones; no contiene claves privadas.
+
+Verificación directa realizada el 25 de septiembre de 2026: el contrato responde `contract_version() = 4`, su hash WASM es `c598ec442ca216581a71b61f3e89eb02644613280e3f5aa24d65b471e92f0948`, y reporta 61 000 USDC de prueba disponibles y 0 comprometidos. Las tres transacciones de v4 enlazadas arriba figuran como exitosas en Horizon. Las cinco wallets del demo tienen XLM de testnet y trustline del activo; eso no implica que las cinco hayan recibido pagos.
+
+El manifiesto también conserva una [transacción de settlement funcional](https://horizon-testnet.stellar.org/transactions/c2001f73217090e30069f513eab8f7999428667a24de5caf26ab3f3ed370ddc4) del **24 de septiembre de 2026**, anterior al despliegue de v4 del día 25. Es evidencia de una versión previa; aún no se presenta como un settlement de v4. Stellar [reinicia testnet periódicamente](https://developers.stellar.org/docs/networks), por lo que el estado y los enlaces deben comprobarse de nuevo al presentar la entrega.
+
+---
+
 ## 🧩 La tesis en una frase
 
 > Una PyME sufre los mismos problemas de Accounts Payable, control y reconciliación que una gran empresa, pero no tiene el stack de SAP/AWS/Bitwave para resolverlos.
