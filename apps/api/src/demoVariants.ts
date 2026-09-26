@@ -24,20 +24,24 @@ type ExtraInvoice = {
 };
 
 /** What `pickVariant` hands back: the base variant plus the extra invoices it randomly drew for this run. */
-export type ResolvedDemoVariant = DemoVariant & { extraInvoices: ExtraInvoice[] };
+export type ResolvedDemoVariant = DemoVariant & { extraInvoices: ExtraInvoice[]; interactive: boolean };
+
+// Los casos interactivos se pagan de verdad en Stellar testnet. Reducirlos
+// diez veces da espacio para repetir el flujo sin disfrazar la capacidad del
+// vault ni tocar facturas que llegaron por ingesta real.
+const INTERACTIVE_DEMO_AMOUNT_SCALE = 0.1;
+
+function scaleDemoAmount(amount: string): string {
+  return (Number(amount) * INTERACTIVE_DEMO_AMOUNT_SCALE).toFixed(2);
+}
 
 /**
- * 5 sets of fictional vendor names for "Probar con un caso real" — the base
- * 5 invoices (amounts, PO/receipt/wallet relationships, the known
- * duplicate fingerprint) stay exactly what `demo-data.json` already has.
- * That's deliberate: those numbers are what makes INV-001..005 land on
- * the exact canonical outcome (§17.3/§25 del maestro) — 1 READY + 4
- * BLOCKED, one payable per exception type. `pickVariant` tops that up
- * with 0-5 extra invoices drawn from `extraVendorPool` (see
- * `buildExtraInvoice` below) so every run shows a different number of
- * companies (5-10) instead of the exact same 5 every time, without
- * risking a synthetic invoice that accidentally breaks one of the 4
- * exception rules.
+ * 5 sets of fictional vendor names for "Probar con un caso real". La
+ * fixture canónica conserva los importes documentados para pruebas; los
+ * escenarios interactivos los escalan diez veces hacia abajo para permitir
+ * más ciclos de settlement en testnet. Se preservan las relaciones de
+ * invoice, PO, receipt, wallet y el duplicado conocido, por lo que el
+ * resultado sigue siendo 1 READY + 4 BLOCKED y una excepción de cada tipo.
  */
 export const DEMO_VARIANTS: DemoVariant[] = [
   {
@@ -130,7 +134,7 @@ export function pickVariant(index?: number, opts: { withExtras?: boolean } = {})
   const extraCount = withExtras ? Math.floor(Math.random() * (variant.extraVendorPool.length + 1)) : 0;
   const extraInvoices = shuffledSample(variant.extraVendorPool, extraCount).map((name, i) => buildExtraInvoice(name, i + 1));
 
-  return { ...variant, extraInvoices };
+  return { ...variant, extraInvoices, interactive: withExtras };
 }
 
 function withVendorNames(variant: ResolvedDemoVariant) {
@@ -159,6 +163,14 @@ function withVendorNames(variant: ResolvedDemoVariant) {
     });
     data.receipts.push({ poId: extra.poId, confirmedQty: 1, invoicedQty: 1, confirmedBy: "ops@pakta.demo", confirmedAt: today });
     data.approvals.push({ objectType: "PO", objectId: extra.poId, policyVersion: "FIN-4.2", approverId: "controller@pakta.demo", timestamp: today });
+  }
+
+  // `interactive` identifica una corrida iniciada desde el picker de demo.
+  // Solo esas corridas usan micro-settlements; el seed de arranque y los
+  // tests siguen leyendo la fixture canónica sin alterarla.
+  if (variant.interactive) {
+    for (const po of data.purchaseOrders) po.amount = scaleDemoAmount(po.amount);
+    for (const invoice of data.invoices) invoice.amount = scaleDemoAmount(invoice.amount);
   }
 
   return data;
