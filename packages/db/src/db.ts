@@ -33,9 +33,10 @@ export async function openDb(connectionString: string, schema: string = PUBLIC_S
   return { query: sql.query.bind(sql), schema };
 }
 
-/** Test-only. Never called from the running server — that would wipe real, persisted usage data on every boot. */
+/** Demo/test reset only. Never called on boot; the API permits it solely for an explicit testnet demo run. */
 export async function resetDb(db: Db): Promise<void> {
-  for (const table of TABLE_NAMES) {
-    await db.query(`TRUNCATE TABLE ${db.schema}.${table}`);
-  }
+  // One Postgres statement instead of a network round-trip per table. The
+  // demo reset runs against Neon, where nine sequential TRUNCATE calls made
+  // a supposedly instant "start from zero" take tens of seconds.
+  await db.query(`TRUNCATE TABLE ${TABLE_NAMES.map((table) => `${db.schema}.${table}`).join(", ")}`);
 }

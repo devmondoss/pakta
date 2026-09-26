@@ -88,6 +88,8 @@ export async function buildApp(options: BuildAppOptions = {}) {
   const enqueueSettlement = createSettlementQueue();
   const enqueueReconciliation = createSettlementQueue();
   const { store, deployment } = settlement;
+  let chainReconciliation: Promise<void> | undefined;
+  let lastChainReconciliationAt = 0;
   /**
    * The real intake endpoint. An uploaded `.xlsx` goes through
    * `ingestWorkbook` and every resulting payable gets persisted to
@@ -136,13 +138,19 @@ export async function buildApp(options: BuildAppOptions = {}) {
   // The chain may have accepted a settlement while the API process was down
   // (or before its response reached us). Reconcile its events before serving
   // the board, so a completed payment never remains visually "READY".
-  async function reconcileChainState(): Promise<void> {
-    if (!settlement.chain?.indexer) return;
-    try {
-      await settlement.chain.indexer.poll();
-    } catch (error) {
-      app.log.warn({ err: error }, "could not reconcile settlement events from Stellar");
-    }
+  function reconcileChainState(): void {
+    if (!settlement.chain?.indexer || chainReconciliation || Date.now() - lastChainReconciliationAt < 30_000) return;
+    lastChainReconciliationAt = Date.now();
+    // Never hold the demo UI hostage while the RPC scans historical events.
+    // New settlements are written synchronously by the adapter; this is the
+    // independent recovery path for a response that was lost after landing.
+    chainReconciliation = settlement.chain.indexer
+      .poll(1)
+      .then(() => undefined)
+      .catch((error) => app.log.warn({ err: error }, "could not reconcile settlement events from Stellar"))
+      .finally(() => {
+        chainReconciliation = undefined;
+      });
   }
 
   // El flujo de la demo representa un conector ERP que confirma cada
@@ -175,11 +183,21 @@ export async function buildApp(options: BuildAppOptions = {}) {
    * picker; sin body, se sortea. El arranque usa la variante 0 para ser reproducible.
    */
   app.post<{ Body: { variantIndex?: number } }>("/demo/reset", async (request, reply) => {
-    if (settlement.chain || (db.schema === "public" && process.env.PAKTA_DEMO_RESET_ENABLED !== "true")) {
-      return reply.code(403).send({ error: "demo reset requires PAKTA_DEMO_RESET_ENABLED=true and no live settlement" });
+    if (settlement.chain && deployment.network !== "testnet") {
+      return reply.code(403).send({ error: "demo reset is only available on testnet while settlement is enabled" });
+    }
+    if (!settlement.chain && db.schema === "public" && process.env.PAKTA_DEMO_RESET_ENABLED !== "true") {
+      return reply.code(403).send({ error: "demo reset requires PAKTA_DEMO_RESET_ENABLED=true" });
+    }
+    const open = await store.listOpenRegistrations();
+    if (open.length > 0) {
+      return reply.code(409).send({ error: "the active demo has registered payables; let it finish or revoke it before starting a new run" });
     }
     await resetDb(db);
-    const { variantLabel, invoices, ingested, rejectedRows } = await seedDemo(db, request.body?.variantIndex);
+    // Each interactive testnet run receives fresh invoice/PO/payable ids. A
+    // settled or revoked Soroban payable id is intentionally never reusable.
+    const runId = Date.now().toString(36).toUpperCase();
+    const { variantLabel, invoices, ingested, rejectedRows } = await seedDemo(db, request.body?.variantIndex, { withExtras: true, runId });
     return { kind: "workbook", ingested, rejectedRows, variantLabel, invoices };
   });
 
@@ -199,7 +217,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   app.get("/policy", async () => loadPolicy());
 
   app.get("/payables", async () => {
-    await reconcileChainState();
+    reconcileChainState();
     await completeDemoReconciliation();
     const { payables, results } = await evaluateLive(db, now());
     const byPayableId = new Map(results.map((r) => [r.payableId, r]));
@@ -319,7 +337,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
    */
   app.post<{ Params: { payableId: string } }>("/payables/:payableId/settle", async (request, reply) => {
     const payableId = request.params.payableId;
-    await reconcileChainState();
+    reconcileChainState();
     const existing = await settledInfo(payableId);
     if (existing) return { status: "ALREADY_SETTLED", payableId, settlement: existing };
 
@@ -352,7 +370,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
       const { signed } = settlement.chain.issuer.sign(proof, deployment);
       const outcome = await enqueueSettlement(() => settlement.chain!.adapter.settle(signed, settlementContext(payable)));
       if (outcome.status === "ALREADY_SETTLED") {
-        await reconcileChainState();
+        reconcileChainState();
         return { status: "ALREADY_SETTLED", payableId, settlement: await settledInfo(payableId) };
       }
       await logActivity(db, `Settlement confirmado en Stellar para ${payableId} (tx ${outcome.settleTx.txHash})`)

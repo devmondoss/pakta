@@ -140,7 +140,7 @@ export async function ingestPdfAndPersist(
 export async function seedDemo(
   db: Db,
   variantIndex?: number,
-  opts: { withExtras?: boolean } = {},
+  opts: { withExtras?: boolean; runId?: string } = {},
 ): Promise<IngestOutcome & { variantLabel: string; invoices: ReturnType<typeof invoiceSummary> }> {
   const variant = pickVariant(variantIndex, opts);
   const workbookBuffer = await buildDemoWorkbookBuffer(variant);

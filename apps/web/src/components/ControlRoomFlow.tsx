@@ -104,6 +104,7 @@ export function ControlRoomFlow({
   const [hasActed, setHasActed] = useState(false);
   const [showCompletion, setShowCompletion] = useState(false);
   const completionShownRef = useRef(false);
+  const sessionStartSettlementsRef = useRef<Set<string>>(new Set());
   const { index, finished } = computeStage(phase, processingStage, payables, hasActed);
 
   // Cada nodo del pipeline es su propio slide — `viewIndex` es cuál se está
@@ -162,18 +163,29 @@ export function ControlRoomFlow({
   }
 
   function handlePhaseChange(nextPhase: IntakePhase, stage?: 0 | 1) {
+    if (nextPhase === "processing") {
+      sessionStartSettlementsRef.current = new Set(
+        payablesRef.current.filter((payable) => payable.status === "SETTLED").map((payable) => payable.payableId),
+      );
+      completionShownRef.current = false;
+      setShowCompletion(false);
+    }
     if (nextPhase !== "idle") setHasActed(true);
     setPhase(nextPhase);
     if (stage !== undefined) setProcessingStage(stage);
   }
 
   const intro = introStage !== null ? stageIntroCopy(introStage, payablesRef.current) : null;
+  const sessionSettled = payables.filter(
+    (payable) => payable.status === "SETTLED" && !sessionStartSettlementsRef.current.has(payable.payableId),
+  );
+  const sessionFinished = phase === "done" && sessionSettled.length > 0 && sessionSettled.every((payable) => payable.settlement?.erpPostingStatus === "RECONCILED");
 
   useEffect(() => {
-    if (!hasActed || !finished || completionShownRef.current) return;
+    if (!hasActed || !sessionFinished || completionShownRef.current) return;
     completionShownRef.current = true;
     setShowCompletion(true);
-  }, [finished, hasActed]);
+  }, [hasActed, sessionFinished]);
 
   return (
     <div className="flex flex-col gap-10">
@@ -183,7 +195,7 @@ export function ControlRoomFlow({
         {showCompletion && (
           <CompletionDialog
             key="completion-dialog"
-            payables={payables.filter((payable) => payable.status === "SETTLED")}
+            payables={sessionSettled}
             onDismiss={() => setShowCompletion(false)}
           />
         )}

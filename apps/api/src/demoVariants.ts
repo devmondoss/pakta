@@ -27,7 +27,7 @@ type ExtraInvoice = {
 };
 
 /** What `pickVariant` hands back: the base variant plus the extra invoices it randomly drew for this run. */
-export type ResolvedDemoVariant = DemoVariant & { extraInvoices: ExtraInvoice[]; interactive: boolean };
+export type ResolvedDemoVariant = DemoVariant & { extraInvoices: ExtraInvoice[]; interactive: boolean; runId?: string };
 
 // Los casos interactivos se pagan de verdad en Stellar testnet. Reducirlos
 // diez veces da espacio para repetir el flujo sin disfrazar la capacidad del
@@ -117,13 +117,14 @@ function shuffledSample<T>(items: T[], count: number): T[] {
  * en el transfer. La identidad de proveedor sigue siendo distinta; la wallet
  * es infraestructura compartida exclusivamente para este demo.
  */
-function buildExtraInvoice(variant: DemoVariant, legalName: string, seq: number): ExtraInvoice {
+function buildExtraInvoice(variant: DemoVariant, legalName: string, seq: number, runId?: string): ExtraInvoice {
+  const suffix = runId ? `-${runId}` : "";
   return {
     vendorId: `VEN-1${String(seq).padStart(2, "0")}`,
     legalName,
     walletAddress: settlementWallets[(seq - 1) % settlementWallets.length]!,
-    poId: `PO-${variant.documentCode}-OPER-25${String(seq).padStart(2, "0")}`,
-    invoiceId: `INV-${variant.documentCode}-25${String(seq).padStart(2, "0")}`,
+    poId: `PO-${variant.documentCode}-OPER-25${String(seq).padStart(2, "0")}${suffix}`,
+    invoiceId: `INV-${variant.documentCode}-25${String(seq).padStart(2, "0")}${suffix}`,
     amount: randomAmount(),
   };
 }
@@ -142,15 +143,19 @@ function buildExtraInvoice(variant: DemoVariant, legalName: string, seq: number)
  * desde el picker de la UI sí quiere la variedad, así que ahí se deja el
  * default.
  */
-export function pickVariant(index?: number, opts: { withExtras?: boolean } = {}): ResolvedDemoVariant {
-  const { withExtras = true } = opts;
+export function pickVariant(index?: number, opts: { withExtras?: boolean; runId?: string } = {}): ResolvedDemoVariant {
+  const { withExtras = true, runId } = opts;
   const variant = index !== undefined ? DEMO_VARIANTS[index] : DEMO_VARIANTS[Math.floor(Math.random() * DEMO_VARIANTS.length)];
   if (!variant) throw new Error(`no demo variant at index ${index}`);
 
   const extraCount = withExtras ? Math.floor(Math.random() * (variant.extraVendorPool.length + 1)) : 0;
-  const extraInvoices = shuffledSample(variant.extraVendorPool, extraCount).map((name, i) => buildExtraInvoice(variant, name, i + 1));
+  const suffix = runId ? `-${runId}` : "";
+  const basePurchaseOrders = variant.basePurchaseOrders.map((id) => `${id}${suffix}`) as DemoVariant["basePurchaseOrders"];
+  const baseInvoices = variant.baseInvoices.map((id) => `${id}${suffix}`) as DemoVariant["baseInvoices"];
+  const runVariant = { ...variant, basePurchaseOrders, baseInvoices };
+  const extraInvoices = shuffledSample(variant.extraVendorPool, extraCount).map((name, i) => buildExtraInvoice(runVariant, name, i + 1, runId));
 
-  return { ...variant, extraInvoices, interactive: withExtras };
+  return { ...runVariant, extraInvoices, interactive: withExtras, runId };
 }
 
 function withVendorNames(variant: ResolvedDemoVariant) {
