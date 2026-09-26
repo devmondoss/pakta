@@ -188,6 +188,10 @@ body { background: var(--background); color: var(--foreground); font-family: var
 .stage-intro-next { display: inline-flex; align-items: center; gap: .4rem; border: 1.6px solid #181713; border-radius: .7rem; padding: .55rem 1rem; background: var(--accent); color: #fff; font-size: .8rem; font-weight: 700; transition: transform .18s ease; }
 .stage-intro-next:hover { transform: translateY(-2px); }
 .stage-intro-next:disabled { cursor: not-allowed; opacity: .5; transform: none; }
+.completion-dialog-title { margin: 0 0 1rem; font-size: 1.08rem; font-weight: 750; line-height: 1.35; }
+.completion-status { display: flex; align-items: center; gap: .55rem; margin: 0 0 .65rem; font-family: var(--font-geist-mono), monospace; font-size: .78rem; font-weight: 700; color: var(--live); }
+.completion-check { display: inline-flex; align-items: center; justify-content: center; width: .85rem; height: .85rem; border-radius: 50%; background: var(--live); color: #fff; font-size: .64rem; }
+.completion-note { margin: 0 0 1.2rem; color: var(--muted); font-size: .75rem; line-height: 1.45; }
 .confirm-dialog-details { display: flex; flex-direction: column; gap: .4rem; margin: .5rem 0 1rem; padding: .8rem .9rem; border: 1.5px solid #d4cdbf; border-radius: .85rem; background: #f3eee3; }
 .confirm-dialog-row { display: flex; align-items: baseline; justify-content: space-between; gap: .8rem; font-size: .8rem; }
 .confirm-dialog-label { color: var(--muted); }

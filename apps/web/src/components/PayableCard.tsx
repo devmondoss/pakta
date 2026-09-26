@@ -7,7 +7,6 @@ import { AmendPoButton, DismissDuplicateButton } from "@/components/ExceptionRes
 import { ReasoningTrace } from "@/components/ReasoningTrace";
 import { RevalidateButton } from "@/components/RevalidateButton";
 import { SettleButton } from "@/components/SettleButton";
-import { ReconcileButton } from "@/components/SettlementActions";
 import { StatusBadge, SeverityBadge } from "@/components/StatusBadge";
 import { WalletActions } from "@/components/WalletActions";
 import { blockedNarrative, explainReady, reasoningTrace, requiredActionLabel } from "@/lib/reasoning";
@@ -212,11 +211,6 @@ export function PayableCard({
                   <span>ledger: {payable.settlement.ledger}</span>
                   <span className="break-all">proof_hash: {payable.settlement.proofHash}</span>
                   <span>ERP: {payable.settlement.erpPostingStatus}</span>
-                  {payable.settlement.erpPostingStatus === "PENDING" && (
-                    <div className="pt-1">
-                      <ReconcileButton payableId={payable.payableId} />
-                    </div>
-                  )}
                 </div>
               )}
               {showSettlementInfo && payable.settlement && <ReasoningTrace steps={reasoningTrace(payable, null)} />}

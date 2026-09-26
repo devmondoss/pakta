@@ -86,6 +86,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
     now,
   });
   const enqueueSettlement = createSettlementQueue();
+  const enqueueReconciliation = createSettlementQueue();
   const { store, deployment } = settlement;
   /**
    * The real intake endpoint. An uploaded `.xlsx` goes through
@@ -144,6 +145,23 @@ export async function buildApp(options: BuildAppOptions = {}) {
     }
   }
 
+  // El flujo de la demo representa un conector ERP que confirma cada
+  // settlement sin una intervención adicional. Guardamos ambos hitos en la
+  // bitácora para que el cierre siga siendo auditable aunque el correo sea
+  // solo una simulación visual del demo.
+  async function completeDemoReconciliation(): Promise<void> {
+    // Varias pestañas pueden consultar el tablero al mismo tiempo. Serializar
+    // esta escritura evita duplicar la conciliación o su registro de cierre.
+    await enqueueReconciliation(async () => {
+      const pending = (await store.listSettlements()).filter((record) => record.erpPostingStatus === "PENDING");
+      for (const record of pending) {
+        await updateErpPostingStatus(db, record.payableId, "RECONCILED");
+        await logActivity(db, `Conciliación ERP automática confirmada para ${record.payableId}`);
+        await logActivity(db, `Notificación de cierre registrada para ${record.payableId} (demo)`);
+      }
+    });
+  }
+
   /** Las 5 variantes que el picker de "Probar con un caso real" ofrece — solo índice + nombre, nunca los montos/relaciones internas. */
   app.get("/demo/variants", async () => DEMO_VARIANTS.map((v, index) => ({ index, label: v.label })));
 
@@ -182,6 +200,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
 
   app.get("/payables", async () => {
     await reconcileChainState();
+    await completeDemoReconciliation();
     const { payables, results } = await evaluateLive(db, now());
     const byPayableId = new Map(results.map((r) => [r.payableId, r]));
 
@@ -338,6 +357,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
       }
       await logActivity(db, `Settlement confirmado en Stellar para ${payableId} (tx ${outcome.settleTx.txHash})`)
         .catch((error: unknown) => request.log.warn({ err: error }, "settlement activity log failed"));
+      await completeDemoReconciliation();
       return {
         status: "SETTLED",
         payableId,

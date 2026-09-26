@@ -245,7 +245,7 @@ export function PayablesBoard({
         <p className={`settlement-progress ${pendingReconciliation.length === 0 ? "settlement-progress-complete" : ""}`} role="status">
           {pendingReconciliation.length === 0
             ? `${reconciled.length} pago(s) liquidado(s) y conciliado(s). El ciclo de settlement está cerrado.`
-            : `${reconciled.length} pago(s) conciliado(s) · ${pendingReconciliation.length} esperando confirmación del ERP.`}
+            : `${reconciled.length} pago(s) conciliado(s) · ${pendingReconciliation.length} sincronizándose automáticamente con el ERP.`}
         </p>
       )}
       {items.length === 0 ? (
