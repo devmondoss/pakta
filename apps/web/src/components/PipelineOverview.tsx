@@ -1,17 +1,38 @@
-const STAGES = ["Intake", "Verificación", "Resolución", "Proof-of-Payable", "Settlement", "Reconciliación"] as const;
+export const PIPELINE_STAGES = ["Intake", "Verificación", "Resolución", "Proof-of-Payable", "Settlement", "Reconciliación"] as const;
 
-/** UN solo flujograma minimalista: puntos + etiqueta, sin caja ni conteos. Un único nodo activo a la vez — el que refleja qué proceso corre ahora. */
-export function PipelineOverview({ activeIndex, finished = false }: { activeIndex: number; finished?: boolean }) {
+/**
+ * Flujograma clickeable: cada nodo es la puerta de entrada a su propio
+ * slide (`ControlRoomFlow` filtra el contenido de abajo según cuál esté
+ * seleccionado). `activeIndex` sigue siendo el bottleneck real del batch
+ * (un solo punto pulsando); `viewIndex` es, aparte, qué slide se está
+ * mirando ahora mismo — pueden no coincidir si el usuario navegó a mano.
+ */
+export function PipelineOverview({
+  activeIndex,
+  viewIndex,
+  finished = false,
+  onSelect,
+}: {
+  activeIndex: number;
+  viewIndex: number;
+  finished?: boolean;
+  onSelect: (index: number) => void;
+}) {
   return (
     <div className="pipeline-strip">
-      {STAGES.map((label, i) => {
+      {PIPELINE_STAGES.map((label, i) => {
         const kind = i < activeIndex || (finished && i === activeIndex) ? "done" : i === activeIndex ? "active" : "idle";
         return (
-          <div key={label} className={`pipeline-strip-node pipeline-strip-node-${kind}`}>
+          <button
+            key={label}
+            type="button"
+            onClick={() => onSelect(i)}
+            className={`pipeline-strip-node pipeline-strip-node-${kind} ${i === viewIndex ? "pipeline-strip-node-viewed" : ""}`}
+          >
             <span className="pipeline-strip-line" aria-hidden />
             <span className="pipeline-strip-dot" aria-hidden />
             <span className="pipeline-strip-label">{label}</span>
-          </div>
+          </button>
         );
       })}
     </div>

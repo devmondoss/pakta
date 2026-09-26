@@ -8,12 +8,12 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 type RunKind = "demo" | "workbook" | "pdf";
 
 const KIND_BY_PREFIX: [prefix: string, kind: RunKind][] = [
-  ["Datos de ejemplo cargados", "demo"],
+  ["Caso cargado", "demo"],
   ["Workbook subido", "workbook"],
   ["Factura PDF leída por IA", "pdf"],
 ];
 
-const KIND_LABEL: Record<RunKind, string> = { demo: "Ejemplo", workbook: "Workbook", pdf: "PDF · IA" };
+const KIND_LABEL: Record<RunKind, string> = { demo: "Caso", workbook: "Workbook", pdf: "PDF · IA" };
 
 function classify(message: string): RunKind | undefined {
   return KIND_BY_PREFIX.find(([prefix]) => message.startsWith(prefix))?.[1];
@@ -54,9 +54,9 @@ export function IntakeHistory() {
 
   return (
     <div className="intake-history">
-      <p className="intake-history-heading">Historial de pruebas{runs.length > 0 ? ` · ${runs.length}` : ""}</p>
+      <p className="intake-history-heading">Actividad reciente{runs.length > 0 ? ` · ${runs.length}` : ""}</p>
       {runs.length === 0 ? (
-        <p className="intake-history-empty">Todavía no corriste ninguna prueba — subí un archivo o usá datos de ejemplo arriba.</p>
+        <p className="intake-history-empty">Todavía no hay actividad — subí un archivo o probá un caso real arriba.</p>
       ) : (
         <div className="intake-history-list">
           {runs.map(({ entry, kind }) => (

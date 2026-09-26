@@ -4,11 +4,13 @@ import { useEffect, useState } from "react";
 import type { Payable, ProofOfPayable, Vendor } from "@/lib/api";
 import { ConfirmReceiptButton } from "@/components/ConfirmReceiptButton";
 import { AmendPoButton, DismissDuplicateButton } from "@/components/ExceptionResolutionActions";
+import { ReasoningTrace } from "@/components/ReasoningTrace";
 import { RevalidateButton } from "@/components/RevalidateButton";
 import { SettleButton } from "@/components/SettleButton";
 import { ReconcileButton } from "@/components/SettlementActions";
 import { StatusBadge, SeverityBadge } from "@/components/StatusBadge";
 import { WalletActions } from "@/components/WalletActions";
+import { explainReady, reasoningTrace, requiredActionLabel } from "@/lib/reasoning";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 const WALLET_REASONS = new Set(["VENDOR_WALLET_CHANGED", "UNATTESTED_WALLET"]);
@@ -36,7 +38,7 @@ function formatDueDate(dueDate: string): string {
   return new Date(`${dueDate}T00:00:00`).toLocaleDateString("es", { day: "2-digit", month: "short" });
 }
 
-function ProofDetail({ payableId }: { payableId: string }) {
+function useProof(payableId: string): ProofOfPayable | "loading" | "error" {
   const [proof, setProof] = useState<ProofOfPayable | "loading" | "error">("loading");
 
   useEffect(() => {
@@ -50,45 +52,110 @@ function ProofDetail({ payableId }: { payableId: string }) {
     };
   }, [payableId]);
 
+  return proof;
+}
+
+/** Por qué este payable quedó READY — checklist en lenguaje llano primero, hashes crudos detrás de un toggle. */
+function ProofDetail({ payable }: { payable: Payable }) {
+  const proof = useProof(payable.payableId);
+  const [showRaw, setShowRaw] = useState(false);
+
   if (proof === "loading") return <p className="text-xs text-muted">Cargando proof…</p>;
   if (proof === "error") return <p className="text-xs text-muted">No se pudo cargar el proof.</p>;
 
   return (
-    <div className="flex flex-col gap-1.5 font-mono text-xs text-muted">
-      <span>wallet: {proof.vendor_wallet}</span>
-      <span>invoice_hash: {proof.invoice_hash}</span>
-      <span>po_hash: {proof.po_hash.slice(0, 24)}…</span>
-      <span>expires_at: {new Date(proof.expires_at).toLocaleString("es")}</span>
+    <div className="flex flex-col gap-3">
+      <ul className="payable-checklist">
+        {explainReady(proof).map((item) => (
+          <li key={item.label} className="payable-checklist-item">
+            <span className="payable-checklist-mark">✓</span>
+            <span>
+              <span className="payable-checklist-label">{item.label}</span> — {item.detail}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <button type="button" onClick={() => setShowRaw((v) => !v)} className="payable-raw-toggle">
+        {showRaw ? "Ocultar" : "Ver"} detalle técnico
+      </button>
+      {showRaw && (
+        <div className="flex flex-col gap-1.5 font-mono text-xs text-muted">
+          <span>wallet: {proof.vendor_wallet}</span>
+          <span>invoice_hash: {proof.invoice_hash}</span>
+          <span>po_hash: {proof.po_hash.slice(0, 24)}…</span>
+          <span>expires_at: {new Date(proof.expires_at).toLocaleString("es")}</span>
+        </div>
+      )}
+      <ReasoningTrace steps={reasoningTrace(payable, proof)} />
     </div>
   );
 }
 
-export function PayableCard({ payable, vendor, settlementEnabled }: { payable: Payable; vendor?: Vendor; settlementEnabled: boolean }) {
-  const [open, setOpen] = useState(false);
+export type PayableCardFocus = "all" | "exception" | "proof" | "settle" | "reconcile";
+
+/**
+ * `focus` recorta qué sección del detalle se muestra — cada slide del
+ * pipeline (Resolución/Proof-of-Payable/Settlement/Reconciliación) le pasa
+ * su propio foco, para que la misma tarjeta no repita exactamente lo mismo
+ * en cada etapa. `collapsible=false` la deja siempre abierta y sin botón:
+ * en un slide dedicado no hace falta un click extra para ver lo único que
+ * hay que ver ahí.
+ */
+export function PayableCard({
+  payable,
+  vendor,
+  settlementEnabled,
+  focus = "all",
+  collapsible = true,
+}: {
+  payable: Payable;
+  vendor?: Vendor;
+  settlementEnabled: boolean;
+  focus?: PayableCardFocus;
+  collapsible?: boolean;
+}) {
+  const [open, setOpen] = useState(!collapsible);
   const exception = payable.exception;
+  const showExceptionActions = focus === "all" || focus === "exception";
+  // El checklist de por qué está READY se muestra tanto en Proof-of-Payable
+  // como en Settlement — en Settlement es justo donde más falta contexto,
+  // porque ahí el usuario decide si confía en apretar "Liquidar".
+  const showProof = (focus === "all" || focus === "proof" || focus === "settle") && payable.status === "READY";
+  const showSettle = (focus === "all" || focus === "settle") && payable.status === "READY";
+  const showSettlementInfo = (focus === "all" || focus === "reconcile") && payable.settlement;
+
+  const headerRows = (
+    <>
+      <div className="payable-card-row">
+        <p className="payable-card-vendor truncate">{payable.vendorName}</p>
+        <StatusBadge status={payable.status} />
+      </div>
+      <div className="payable-card-row">
+        <span className="payable-card-amount">USD {payable.amount}</span>
+        <span className="payable-card-due">Vence {formatDueDate(payable.dueDate)}</span>
+      </div>
+      <div className="payable-card-row">
+        <p className="payable-card-id truncate">
+          {payable.invoiceId} · {payable.poId}
+        </p>
+        {collapsible && <ChevronIcon open={open} />}
+      </div>
+    </>
+  );
 
   return (
     <div className="payable-card">
-      <button onClick={() => setOpen((v) => !v)} className="payable-card-trigger">
-        <div className="payable-card-row">
-          <p className="payable-card-vendor truncate">{payable.vendorName}</p>
-          <StatusBadge status={payable.status} />
-        </div>
-        <div className="payable-card-row">
-          <span className="payable-card-amount">USD {payable.amount}</span>
-          <span className="payable-card-due">Vence {formatDueDate(payable.dueDate)}</span>
-        </div>
-        <div className="payable-card-row">
-          <p className="payable-card-id truncate">
-            {payable.invoiceId} · {payable.poId}
-          </p>
-          <ChevronIcon open={open} />
-        </div>
-      </button>
+      {collapsible ? (
+        <button onClick={() => setOpen((v) => !v)} className="payable-card-trigger">
+          {headerRows}
+        </button>
+      ) : (
+        <div className="payable-card-trigger payable-card-trigger-static">{headerRows}</div>
+      )}
 
       {open && (
         <div className="payable-card-detail">
-          {exception ? (
+          {exception && showExceptionActions ? (
             <div className="flex flex-col gap-3">
               <div className="flex items-start justify-between gap-3">
                 <p className="text-sm text-foreground/90">{exception.message}</p>
@@ -102,6 +169,10 @@ export function PayableCard({ payable, vendor, settlementEnabled }: { payable: P
                   Owner: <span className="text-foreground">{exception.ownerRole}</span>
                 </span>
               </div>
+              <div className="payable-required-action">
+                <span className="payable-required-action-label">Qué hacer</span>
+                <p>{requiredActionLabel(exception.requiredAction)}</p>
+              </div>
                 <div className="flex flex-wrap items-center gap-2 pt-1">
                 {WALLET_REASONS.has(exception.reason) && (
                   <WalletActions vendorId={payable.vendorId} attestationStatus={vendor?.wallet?.attestationStatus} />
@@ -111,11 +182,12 @@ export function PayableCard({ payable, vendor, settlementEnabled }: { payable: P
                 {AMOUNT_REASONS.has(exception.reason) && <AmendPoButton payableId={payable.payableId} />}
                 <RevalidateButton payableId={payable.payableId} />
               </div>
+              <ReasoningTrace steps={reasoningTrace(payable, null)} />
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              {payable.status === "READY" && <ProofDetail payableId={payable.payableId} />}
-              {payable.status === "READY" && (
+              {showProof && <ProofDetail payable={payable} />}
+              {showSettle && (
                 <SettleButton
                   payableId={payable.payableId}
                   vendorName={payable.vendorName}
@@ -123,7 +195,7 @@ export function PayableCard({ payable, vendor, settlementEnabled }: { payable: P
                   enabled={settlementEnabled}
                 />
               )}
-              {payable.settlement && (
+              {showSettlementInfo && payable.settlement && (
                 <div className="payable-settlement flex flex-col gap-2 font-mono text-xs">
                   <a
                     href={payable.settlement.explorerUrl}
@@ -143,6 +215,7 @@ export function PayableCard({ payable, vendor, settlementEnabled }: { payable: P
                   )}
                 </div>
               )}
+              {showSettlementInfo && payable.settlement && <ReasoningTrace steps={reasoningTrace(payable, null)} />}
             </div>
           )}
         </div>

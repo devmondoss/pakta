@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { PlayCircle } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -28,7 +29,7 @@ type IngestResult =
       kind: "workbook";
       ingested: number;
       rejectedRows: { sheet: string; rowNumber: number; errors: string[] }[];
-      /** Solo presente cuando vino de "Usar datos de ejemplo" (`POST /demo/reset`), no de un upload real. */
+      /** Solo presente cuando vino de "Probar con un caso real" (`POST /demo/reset`), no de un upload real. */
       variantLabel?: string;
       invoices?: { invoiceId: string; vendorName: string; amount: string }[];
     }
@@ -121,7 +122,7 @@ export function IntakeFlow({
     // parpadeo aunque la API real responda en milisegundos.
     const revealSteps = (async () => {
       for (let i = 0; i < flowSteps.length - 1; i++) {
-        await wait(800);
+        await wait(1300);
         setStepIndex(i + 1);
       }
     })();
@@ -136,7 +137,7 @@ export function IntakeFlow({
         }),
       ]);
       setStepIndex(flowSteps.length);
-      await wait(650);
+      await wait(1000);
       setResult(outcome);
       setState("done");
       router.refresh();
@@ -157,7 +158,7 @@ export function IntakeFlow({
    * con datos insuficientes.
    */
   async function loadDemoData(variantIndex: number) {
-    await runIngest(WORKBOOK_STEPS, "Datos de ejemplo", async () => {
+    await runIngest(WORKBOOK_STEPS, "Caso de prueba", async () => {
       const res = await fetch(`${API_URL}/demo/reset`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -241,9 +242,10 @@ export function IntakeFlow({
               e.stopPropagation();
               setShowVariants((v) => !v);
             }}
-            className="app-button-secondary"
+            className="app-button-secondary inline-flex items-center gap-1.5"
           >
-            Usar datos de ejemplo
+            <PlayCircle size={15} strokeWidth={2.2} />
+            Probar con un caso real
           </button>
 
           {showVariants && (
@@ -252,9 +254,10 @@ export function IntakeFlow({
               onClick={(e) => e.stopPropagation()}
             >
               {!variants ? (
-                <p className="p-2 text-xs text-muted">Cargando opciones…</p>
+                <p className="p-2 text-xs text-muted">Cargando casos…</p>
               ) : (
                 <div className="demo-variant-list">
+                  <p className="demo-variant-heading">Elegí una industria</p>
                   {variants.map((v) => (
                     <button
                       key={v.index}
@@ -346,7 +349,7 @@ export function IntakeFlow({
           <div className="intake-result-head">
             <p className="text-sm">
               <span className="text-ready">Listo.</span>{" "}
-              {result.variantLabel ? `Datos de ejemplo — ${result.variantLabel}` : fileName} — {result.ingested}{" "}
+              {result.variantLabel ? `Caso — ${result.variantLabel}` : fileName} — {result.ingested}{" "}
               payables ingestados de verdad, persistidos en la base.
             </p>
             <button onClick={reset} className="intake-reset shrink-0">

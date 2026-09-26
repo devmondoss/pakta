@@ -1,15 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Payable, Vendor } from "@/lib/api";
 import { IntakeFlow } from "@/components/IntakeFlow";
 import { IntakeHistory } from "@/components/IntakeHistory";
-import { NotificationsToggle } from "@/components/NotificationsToggle";
 import { PayablesBoard } from "@/components/PayablesBoard";
 import { PipelineOverview } from "@/components/PipelineOverview";
-import { SummaryStrip } from "@/components/SummaryStrip";
+import { ToastStack } from "@/components/ToastStack";
 
 type IntakePhase = "idle" | "processing" | "done" | "error";
+
+// Resolución trae varias tarjetas de excepción para leer — se queda más
+// tiempo en pantalla que un paso que es solo una lista o un botón.
+const TOUR_STEP_MS: Record<number, number> = { 1: 1800, 2: 3600, 3: 2200, 4: 2200, 5: 1400 };
 
 /** Qué tan lejos llegó un payable individual en el pipeline. */
 function payableStage(p: Payable): number {
@@ -68,6 +71,32 @@ export function ControlRoomFlow({
   const [hasActed, setHasActed] = useState(false);
   const { index, finished } = computeStage(phase, processingStage, payables, hasActed);
 
+  // Cada nodo del pipeline es su propio slide — `viewIndex` es cuál se está
+  // mirando ahora. Mientras el usuario no toque nada (`pinned === false`),
+  // el slide sigue el progreso real solo; en cuanto hace click en un nodo
+  // toma el control manual, como en una presentación.
+  //
+  // El progreso real puede saltar varias etapas de una sola vez — un batch
+  // recién cargado ya puede traer un payable READY o incluso SETTLED, así
+  // que `index` salta directo ahí. Si `viewIndex` copiara ese salto tal
+  // cual, Resolución (con las razones de cada bloqueo) ni se llegaría a
+  // ver: aparecería y desaparecería en el mismo render. En vez de eso, la
+  // vista camina una etapa a la vez con una pausa, como si cada paso
+  // realmente tomara su tiempo.
+  const [viewIndex, setViewIndex] = useState(0);
+  const [pinned, setPinned] = useState(false);
+  useEffect(() => {
+    if (pinned || viewIndex === index) return;
+    const next = viewIndex < index ? viewIndex + 1 : index;
+    const id = setTimeout(() => setViewIndex(next), TOUR_STEP_MS[next] ?? 1400);
+    return () => clearTimeout(id);
+  }, [index, pinned, viewIndex]);
+
+  function selectStage(i: number) {
+    setPinned(true);
+    setViewIndex(i);
+  }
+
   function handlePhaseChange(nextPhase: IntakePhase, stage?: 0 | 1) {
     if (nextPhase !== "idle") setHasActed(true);
     setPhase(nextPhase);
@@ -76,20 +105,19 @@ export function ControlRoomFlow({
 
   return (
     <div className="flex flex-col gap-10">
-      {hasActed && (
-        <div className="flex justify-end">
-          <NotificationsToggle />
+      <ToastStack />
+      <PipelineOverview activeIndex={index} viewIndex={viewIndex} finished={finished} onSelect={selectStage} />
+
+      <div className={viewIndex === 0 ? "flex flex-col gap-6" : "hidden"}>
+        <div className="control-panel p-3 sm:p-4">
+          <IntakeFlow onPhaseChange={handlePhaseChange} />
         </div>
-      )}
-      <PipelineOverview activeIndex={index} finished={finished} />
-      {hasActed && <SummaryStrip payables={payables} />}
-      <div className="control-panel p-3 sm:p-4">
-        <IntakeFlow onPhaseChange={handlePhaseChange} />
+        <IntakeHistory />
       </div>
-      {!hasActed && <IntakeHistory />}
+
       {hasActed && (
-        <div id="resultados">
-          <PayablesBoard initialPayables={initialPayables} vendors={vendors} onPayablesChange={setPayables} />
+        <div id="resultados" className={viewIndex === 0 ? "hidden" : ""}>
+          <PayablesBoard initialPayables={initialPayables} vendors={vendors} stage={viewIndex} onPayablesChange={setPayables} />
         </div>
       )}
     </div>

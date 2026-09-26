@@ -25,7 +25,7 @@ type ExtraInvoice = {
 export type ResolvedDemoVariant = DemoVariant & { extraInvoices: ExtraInvoice[] };
 
 /**
- * 5 sets of fictional vendor names for "Usar datos de ejemplo" — the base
+ * 5 sets of fictional vendor names for "Probar con un caso real" — the base
  * 5 invoices (amounts, PO/receipt/wallet relationships, the known
  * duplicate fingerprint) stay exactly what `demo-data.json` already has.
  * That's deliberate: those numbers are what makes INV-001..005 land on

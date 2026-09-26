@@ -124,7 +124,7 @@ export async function ingestPdfAndPersist(
 /**
  * Loads a demo variant (`./demoVariants.ts` — same amounts/PO/receipt/
  * wallet relationships as the canonical fixture, different vendor names
- * per variant so "Usar datos de ejemplo" doesn't show the same five
+ * per variant so "Probar con un caso real" doesn't show the same five
  * companies every time) through the exact same path a real upload takes,
  * PLUS the one external fact the demo depends on (§25 maestro) that no
  * workbook upload could ever carry: INV-1994 for the vendor in INV-002's
@@ -147,7 +147,7 @@ export async function seedDemo(
   const outcome = await ingestAndPersist(db, workbookBuffer);
   await addKnownFingerprint(db, "VEN-002|3500.00", "INV-1994, recorded 11 days before the demo batch");
   const invoices = invoiceSummary(variant);
-  await logActivity(db, `Datos de ejemplo cargados — ${variant.label} (${invoices.length} invoices)`);
+  await logActivity(db, `Caso cargado — ${variant.label} (${invoices.length} invoices)`);
   return { ...outcome, variantLabel: variant.label, invoices };
 }
 

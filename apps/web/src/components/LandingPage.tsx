@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { motion, useReducedMotion } from "motion/react";
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
@@ -51,7 +52,10 @@ export function LandingPage() {
     <main className="landing-shell">
       <section className="landing-hero" id="inicio">
         <nav className="landing-nav" aria-label="Navegación principal">
-          <Link className="landing-wordmark" href="/" aria-label="Pakta, inicio">pakta<span aria-hidden="true">••</span></Link>
+          <Link className="landing-wordmark" href="/" aria-label="Pakta, inicio">
+            <Image src="/pakta-logo.png" alt="" width={24} height={24} priority aria-hidden="true" />
+            pakta<span aria-hidden="true">••</span>
+          </Link>
           <div className="landing-nav-links"><a href="#como-funciona">Cómo funciona</a><a href="#control">El control</a><a href="#proof">Proof</a></div>
           <Link className="landing-nav-cta" href="/control-room">Abrir demo <ArrowUpRight size={14} /></Link>
         </nav>

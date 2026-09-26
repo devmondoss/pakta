@@ -112,11 +112,11 @@ export async function buildApp(options: BuildAppOptions = {}) {
     };
   }
 
-  /** Las 5 variantes que el picker de "Usar datos de ejemplo" ofrece — solo índice + nombre, nunca los montos/relaciones internas. */
+  /** Las 5 variantes que el picker de "Probar con un caso real" ofrece — solo índice + nombre, nunca los montos/relaciones internas. */
   app.get("/demo/variants", async () => DEMO_VARIANTS.map((v, index) => ({ index, label: v.label })));
 
   /**
-   * "Usar datos de ejemplo" en el Intake: no re-sube el xlsx crudo desde el
+   * "Probar con un caso real" en el Intake: no re-sube el xlsx crudo desde el
    * cliente (eso perdía el hecho externo que `seedDemo` persiste — el
    * fingerprint que hace que INV-002 caiga en DUPLICATE_INVOICE). Wipea y
    * reseeda por el mismo camino que `resetDemo.ts`, así el resultado es
