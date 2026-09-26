@@ -1,6 +1,8 @@
+import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import ExcelJS from "exceljs";
+import { encodeAccountId } from "@pakta/stellar-sdk-wrapper";
 
 const fixturesDir = path.resolve(import.meta.dirname, "../../../fixtures/demo-workbook");
 const baseData = JSON.parse(readFileSync(path.join(fixturesDir, "demo-data.json"), "utf-8"));
@@ -86,12 +88,20 @@ function shuffledSample<T>(items: T[], count: number): T[] {
  * receipt/aprobación que calzan exacto, sin fingerprint repetido — así el
  * batch siempre puede tener entre 5 y 10 invoices sin arriesgar que una de
  * las 4 excepciones documentadas se rompa o se duplique por accidente.
+ *
+ * La wallet tiene que ser una StrKey `G...` válida de verdad — no alcanza
+ * con que "parezca" una: `buildProofOfPayable` valida el checksum real, y
+ * un string random con el prefijo pegado a mano lo rechazaba ahí (el
+ * kernel no lo detecta porque no valida formato, solo atestación, así que
+ * el payable llegaba a READY y recién se rompía al pedir el proof). No es
+ * una cuenta fondeada en testnet — sirve para mostrar el proof, no para
+ * liquidar de verdad esta wallet puntual.
  */
 function buildExtraInvoice(legalName: string, seq: number): ExtraInvoice {
   return {
     vendorId: `VEN-1${String(seq).padStart(2, "0")}`,
     legalName,
-    walletAddress: `GX${seq}EXTRA${Math.random().toString(36).slice(2, 14).toUpperCase()}`,
+    walletAddress: encodeAccountId(randomBytes(32)),
     poId: `PO-9${String(seq).padStart(4, "0")}`,
     invoiceId: `INV-1${String(seq).padStart(2, "0")}`,
     amount: randomAmount(),
