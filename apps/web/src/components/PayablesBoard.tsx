@@ -1,12 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { Payable, Vendor } from "@/lib/api";
 import { OnChainPanel } from "@/components/OnChainPanel";
 import { PayableCard, type PayableCardFocus } from "@/components/PayableCard";
 import { StatusBadge } from "@/components/StatusBadge";
+import { postAction } from "@/lib/postAction";
 import { pushToast } from "@/lib/toast";
 import { blockedNarrative, reasonLabel } from "@/lib/reasoning";
+
+const AUTO_SETTLE_MS = 5000;
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -66,9 +70,16 @@ export function PayablesBoard({
   /** Se llama cuando una acción (propia o de otra pestaña) de verdad movió algo — quien escucha usa esto para volver a seguir el progreso real. */
   onProgress?: () => void;
 }) {
+  const router = useRouter();
   const [payables, setPayables] = useState(initialPayables);
   const [settlementEnabled, setSettlementEnabled] = useState(false);
   const payablesRef = useRef(payables);
+  // Cuándo se vio por primera vez cada payable READY en Settlement, y
+  // cuáles ya dispararon su auto-settle — en refs, no en el array de
+  // `payables` (que cambia de referencia en cada poll de 4s): si el timer
+  // dependiera de `payables`, se reiniciaría antes de completar los 5s.
+  const autoSettleFirstSeenRef = useRef<Map<string, number>>(new Map());
+  const autoSettleFiredRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     payablesRef.current = payables;
   }, [payables]);
@@ -133,6 +144,32 @@ export function PayablesBoard({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Auto-settle: parado en Settlement, cada READY se liquida sola a los
+  // 5s de aparecer — sin click, sin el diálogo de confirmación (ese es
+  // solo para el disparo manual). Dispara la transacción real en Stellar.
+  // Solo depende de [stage, settlementEnabled] — nunca de `payables`
+  // (cambia de referencia en cada poll de 4s, y reiniciaría el conteo
+  // antes de llegar a los 5s) — el scan usa `payablesRef.current`, que
+  // siempre está al día sin forzar el efecto a reiniciar.
+  useEffect(() => {
+    if (stage !== 4 || !settlementEnabled) return;
+    const id = setInterval(() => {
+      const now = Date.now();
+      for (const p of payablesRef.current) {
+        if (p.status !== "READY" || autoSettleFiredRef.current.has(p.payableId)) continue;
+        const firstSeen = autoSettleFirstSeenRef.current.get(p.payableId);
+        if (firstSeen === undefined) {
+          autoSettleFirstSeenRef.current.set(p.payableId, now);
+        } else if (now - firstSeen >= AUTO_SETTLE_MS) {
+          autoSettleFiredRef.current.add(p.payableId);
+          postAction(`/payables/${encodeURIComponent(p.payableId)}/settle`).then((ok) => ok && router.refresh());
+        }
+      }
+    }, 500);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage, settlementEnabled]);
 
   if (stage === 1) {
     return (
