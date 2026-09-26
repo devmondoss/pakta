@@ -50,6 +50,25 @@ function isPdf(filename: string, mimetype: string, buffer: Buffer): boolean {
 const CHAIN_DISABLED =
   "on-chain settlement is not configured: set PAKTA_ISSUER_SECRET and PAKTA_EXECUTOR_SECRET to enable it";
 
+/**
+ * Una cuenta Stellar solo puede tener una transacción pendiente a la vez.
+ * Serializamos los settlements de este proceso para que dos pestañas (o una
+ * ráfaga accidental de clics) no reutilicen la misma secuencia y provoquen
+ * `TRY_AGAIN_LATER` en el RPC.
+ */
+function createSettlementQueue() {
+  let tail: Promise<void> = Promise.resolve();
+
+  return async function enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    const next = tail.then(operation, operation);
+    tail = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
+  };
+}
+
 export async function buildApp(options: BuildAppOptions = {}) {
   let extractor = options.extractor;
   const app = Fastify({ logger: options.logger ?? true });
@@ -66,6 +85,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
     chain: options.chain,
     now,
   });
+  const enqueueSettlement = createSettlementQueue();
   const { store, deployment } = settlement;
   /**
    * The real intake endpoint. An uploaded `.xlsx` goes through
@@ -288,7 +308,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
     try {
       const proof = buildProofOfPayable(payable, result, at);
       const { signed } = settlement.chain.issuer.sign(proof, deployment);
-      const outcome = await settlement.chain.adapter.settle(signed, settlementContext(payable));
+      const outcome = await enqueueSettlement(() => settlement.chain!.adapter.settle(signed, settlementContext(payable)));
       if (outcome.status === "ALREADY_SETTLED") {
         return { status: "ALREADY_SETTLED", payableId, settlement: await settledInfo(payableId) };
       }
