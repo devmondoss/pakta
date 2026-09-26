@@ -119,6 +119,8 @@ body { background: var(--background); color: var(--foreground); font-family: var
 /* Un slide por etapa — solo esto se muestra, nada de otras etapas compitiendo por atención. */
 .pipeline-slide-heading { margin: 0 0 1.1rem; font-family: var(--font-geist-mono), monospace; font-size: .95rem; font-weight: 700; letter-spacing: -.02em; color: var(--foreground); }
 .pipeline-slide-list { display: flex; flex-direction: column; gap: 1rem; }
+.settlement-progress { margin: 0 0 1rem; padding: .65rem .8rem; border: 1.4px solid #d1ad55; border-radius: .75rem; background: #f7edd0; color: #725314; font-size: .78rem; line-height: 1.45; }
+.settlement-progress-complete { border-color: #6c9d35; background: #e1efce; color: #39671b; font-weight: 650; }
 .onchain-panel { margin-bottom: 1.3rem; padding: 1.1rem 1.2rem 1.2rem; border: 1.8px solid #181713; border-radius: 1.1rem; background: #14251c; color: #d9e9d9; box-shadow: 4px 4px 0 #181713; }
 .onchain-panel-head { display: flex; align-items: center; gap: .4rem; margin-bottom: .85rem; }
 .onchain-panel-icon { color: #7fbf7f; flex: 0 0 auto; }

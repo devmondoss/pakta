@@ -28,8 +28,13 @@ function stageIntroCopy(stage: number, payables: Payable[]): { title: string; bo
       return { title: "Proof-of-Payable", body: `${count("READY")} payable(s) con proof calculado — proveedor, wallet y monto verificados.` };
     case 4:
       return { title: "Settlement", body: `${count("READY")} payable(s) listos para liquidar en Stellar.` };
-    case 5:
-      return { title: "Reconciliación", body: `${count("SETTLED")} settlement(s) esperando confirmación del ERP.` };
+    case 5: {
+      const settled = payables.filter((p) => p.status === "SETTLED");
+      const reconciled = settled.filter((p) => p.settlement?.erpPostingStatus === "RECONCILED");
+      return reconciled.length === settled.length && settled.length > 0
+        ? { title: "Reconciliación", body: `${reconciled.length} pago(s) se liquidaron y se conciliaron con el ERP. Ciclo cerrado.` }
+        : { title: "Reconciliación", body: `${settled.length} settlement(s) esperando confirmación del ERP.` };
+    }
     default:
       return null;
   }
@@ -75,7 +80,13 @@ function computeStage(
   if (payables.length === 0) return { index: 0, finished: false }; // nada cargado todavía
 
   const index = Math.max(...payables.map(payableStage));
-  const finished = payables.every((p) => p.status === "SETTLED" && p.settlement?.erpPostingStatus === "RECONCILED");
+  // Las excepciones bloqueadas permanecen en Resolución hasta que un humano
+  // actúe. No deben impedir que el carril de settlement cierre para los
+  // payables que sí llegaron a estar listos y ya fueron conciliados.
+  const settlementCandidates = payables.filter((p) => p.status !== "BLOCKED");
+  const finished =
+    settlementCandidates.length > 0 &&
+    settlementCandidates.every((p) => p.status === "SETTLED" && p.settlement?.erpPostingStatus === "RECONCILED");
   return { index, finished };
 }
 

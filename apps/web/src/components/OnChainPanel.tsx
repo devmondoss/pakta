@@ -28,14 +28,28 @@ export function OnChainPanel() {
   const [vault, setVault] = useState<Vault | null>(null);
 
   useEffect(() => {
-    fetch(`${API_URL}/health`, { cache: "no-store" })
-      .then((res) => (res.ok ? res.json() : Promise.reject()))
-      .then(setHealth)
-      .catch(() => {});
+    let active = true;
+    async function load() {
+      try {
+        const res = await fetch(`${API_URL}/health`, { cache: "no-store" });
+        if (active && res.ok) setHealth(await res.json());
+      } catch {
+        // Conservamos el último estado conocido si la API se reinicia.
+      }
+    }
+    load();
+    const id = setInterval(load, 6000);
+    return () => {
+      active = false;
+      clearInterval(id);
+    };
   }, []);
 
   useEffect(() => {
-    if (health?.settlement !== "enabled") return;
+    if (health?.settlement !== "enabled") {
+      setVault(null);
+      return;
+    }
     let active = true;
     async function load() {
       try {

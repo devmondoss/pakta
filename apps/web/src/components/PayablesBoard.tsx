@@ -203,6 +203,8 @@ export function PayablesBoard({
   if (!config) return null;
 
   const items = payables.filter((p) => p.status === config.status);
+  const reconciled = stage === 5 ? items.filter((p) => p.settlement?.erpPostingStatus === "RECONCILED") : [];
+  const pendingReconciliation = stage === 5 ? items.filter((p) => p.settlement?.erpPostingStatus !== "RECONCILED") : [];
   // Solo en Proof-of-Payable: además de las que SÍ tienen proof, mostrar
   // caso por caso por qué las bloqueadas todavía no lo tienen — el
   // contraste completa la etapa en vez de dejarla solo con el lado
@@ -215,6 +217,13 @@ export function PayablesBoard({
         {config.heading} · {items.length}
       </p>
       {(stage === 4 || stage === 5) && <OnChainPanel />}
+      {stage === 5 && items.length > 0 && (
+        <p className={`settlement-progress ${pendingReconciliation.length === 0 ? "settlement-progress-complete" : ""}`} role="status">
+          {pendingReconciliation.length === 0
+            ? `${reconciled.length} pago(s) liquidado(s) y conciliado(s). El ciclo de settlement está cerrado.`
+            : `${reconciled.length} pago(s) conciliado(s) · ${pendingReconciliation.length} esperando confirmación del ERP.`}
+        </p>
+      )}
       {items.length === 0 ? (
         <p className="payable-column-empty">{config.empty}</p>
       ) : (
