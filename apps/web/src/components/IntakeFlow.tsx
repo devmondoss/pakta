@@ -173,13 +173,18 @@ export function IntakeFlow({
             {steps.map((label, i) => {
               const status = i < stepIndex ? "done" : i === stepIndex ? "active" : "pending";
               return (
-                <div key={label} className={`intake-state-row ${status === "pending" ? "text-muted" : "text-foreground"}`}>
-                  {status === "done" && <span className="intake-state-marker intake-state-marker-done" />}
-                  {status === "active" && (
-                    <span className="h-3 w-3 animate-spin rounded-full border-2 border-accent/25 border-t-accent" />
+                <div key={label} className="intake-state-item flex flex-col gap-1">
+                  <div className={`intake-state-row ${status === "pending" ? "text-muted" : "text-foreground"}`}>
+                    {status === "done" && <span className="intake-state-marker intake-state-marker-done" />}
+                    {status === "active" && (
+                      <span className="h-3 w-3 animate-spin rounded-full border-2 border-accent/25 border-t-accent" />
+                    )}
+                    {status === "pending" && <span className="intake-state-marker intake-state-marker-pending" />}
+                    <span>{label}</span>
+                  </div>
+                  {status === "active" && i === 2 && (
+                    <p className="intake-model-credit">Agente Pakta · razonamiento asistido por NVIDIA Nemotron 3.5 Lightning 30B</p>
                   )}
-                  {status === "pending" && <span className="intake-state-marker intake-state-marker-pending" />}
-                  <span>{label}</span>
                 </div>
               );
             })}
