@@ -69,7 +69,7 @@ flowchart LR
 
 ## 2. La solución — Pakta
 
-Pakta se conecta con la evidencia que la empresa **ya tiene** (Excel, PDFs, email), usa AI para leerla y relacionarla, pero **nunca deja que un modelo probabilístico autorice un pago**: un motor de reglas determinístico decide si el payable está listo, y solo entonces se emite un **Proof-of-Payable** que habilita el settlement en Stellar. Cuando algo no cuadra, no es un error genérico — es una excepción tipada con dueño y acción exacta, que se revalida sola en cuanto se resuelve.
+Pakta se conecta con la evidencia que la empresa **ya tiene** (Excel, PDFs, email), usa AI para leerla y relacionarla, pero **nunca deja que un modelo probabilístico autorice un pago**: un motor de reglas determinístico decide si el payable está listo, y solo entonces se emite un **Proof-of-Payable**. Cuando algo no cuadra, no es un error genérico — es una excepción tipada con dueño y acción exacta, que se revalida sola en cuanto se resuelve. Lo que pasa **después** del Proof-of-Payable depende de si la empresa liquida en crypto o no — por eso el diagrama bifurca ahí, no antes.
 
 ### Flujo propuesto (con Pakta)
 
@@ -83,21 +83,31 @@ flowchart LR
     KER -->|"❌ excepción"| EXC["Exception Service<br/>dueño + acción exacta"]
     EXC -->|"resuelto"| KER
     KER -->|"✅ listo"| PRF["Proof-of-Payable<br/>Builder"]
-    PRF --> SET["Settlement Adapter"]
+    PRF --> FORK{"¿Liquida<br/>en crypto?"}
+
+    FORK -->|"Sí — Escenario B"| SET["Settlement Adapter"]
     SET --> SC["Soroban Contract"]
     SC --> STL[("Stellar<br/>USDC")]
     STL --> IDX["Event Indexer"]
+
+    FORK -->|"No — Escenario A"| PAY["Tesorería paga por banco<br/>(fuera de Pakta)"]
+    PAY --> MARK["Marcar como pagado"]
+
     IDX --> REC["Reconciliación<br/>de vuelta al Excel/ERP"]
+    MARK --> REC
 
     classDef good fill:#dff0e6,stroke:#177a51,color:#0d3d29
-    class ING,AI,CPM,KER,EXC,PRF,SET,SC,STL,IDX,REC good
+    classDef manual fill:#f6c9c4,stroke:#b73b3b,color:#5a1414
+    class ING,AI,CPM,KER,EXC,PRF,REC good
+    class SET,SC,STL,IDX good
+    class PAY,MARK manual
 ```
 
 
 
 > **La diferencia:** el payment rail responde "¿podemos mover el dinero?". Pakta responde **"¿esta obligación específica está realmente lista para pagarse, a este destinatario, por este monto, ahora?"** — antes de que el dinero se mueva, no después.
 
-> **Alcance de este diagrama:** el tramo `SET → SC → STL → IDX` es el **Escenario B** (settlement real en Stellar). Si la empresa no quiere/necesita crypto, ese tramo se sustituye por un cierre manual (Proof-of-Payable como certificado interno + pago por banco fuera de Pakta) — ver [Escenarios UX](Pakta_Escenarios_UX.md) §2.
+> Detalle de pantallas por rol para cada rama del fork: [Escenarios UX](Pakta_Escenarios_UX.md) §2-3.
 
 ---
 
@@ -189,7 +199,7 @@ Stack real, sin nada especulativo que no vayamos a usar en el hackathon: nada de
 
 ## 4. Diagrama de procesos — pipeline end-to-end
 
-Mismo flujo de las secciones 1-2, ahora con el detalle de quién construye cada bloque (`Pakta_Division_Trabajo.md`): **Dev 2** posee todo lo anterior al Proof-of-Payable, **Dev 1** todo lo posterior.
+Mismo flujo de las secciones 1-2, ahora con el detalle de quién construye cada bloque (`Pakta_Division_Trabajo.md`): **Dev 2** posee todo lo anterior al Proof-of-Payable. **Dev 1 posee el settlement solo cuando la empresa liquida en crypto (Escenario B)** — si no, ese tramo ni existe como código, es un proceso manual fuera de Pakta (Escenario A).
 
 ```mermaid
 flowchart LR
@@ -208,11 +218,18 @@ flowchart LR
         G["Proof-of-Payable Builder"]
     end
 
-    subgraph DEV1["Dev 1 — Web3 / Settlement"]
+    FORK{"¿Liquida en crypto?"}
+
+    subgraph DEV1["Dev 1 — Web3 / Settlement (solo Escenario B)"]
         H["Settlement Adapter<br/>SAC / x402 / MPP"]
         I["Soroban Contract<br/>payable-contract"]
         J[("Stellar Testnet<br/>USDC / SAC")]
         K["Event Indexer Worker"]
+    end
+
+    subgraph MANUAL["Fuera de Pakta (Escenario A)"]
+        PAY["Tesorería paga por banco"]
+        MARK["Marcar como pagado"]
     end
 
     L["Reconciliation Export<br/>de vuelta a Excel/CSV"]
@@ -226,9 +243,13 @@ flowchart LR
     E -- "BLOCKED (typed exception)" --> F
     F -- "owner resuelve → revalidate" --> E
     E -- "READY (0 exceptions)" --> G
-    G --> H --> I --> J
-    J --> K --> L
+    G --> FORK
+    FORK -- "Sí" --> H --> I --> J --> K --> L
+    FORK -- "No" --> PAY --> MARK --> L
     L -. "estado visible" .-> CFO(["CFO / Finance Ops"])
+
+    classDef manual fill:#f6c9c4,stroke:#b73b3b,color:#5a1414
+    class PAY,MARK manual
 ```
 
 
@@ -475,7 +496,7 @@ stateDiagram-v2
 
 ## 9. Diagrama de secuencia — demo canónico (5 invoices, `fixtures/demo-workbook`)
 
-Corrida real contra el fixture ya implementado — no es hipotética, es el test de aceptación `demo-fixture.test.ts`.
+Corrida real contra el fixture ya implementado — no es hipotética, es el test de aceptación `demo-fixture.test.ts`. Esta secuencia corre en **Escenario B** (settlement Stellar); en Escenario A, `SET`/`SC`/`STL` de abajo se reemplazan por el cierre manual descrito en [Escenarios UX](Pakta_Escenarios_UX.md) §2.
 
 ```mermaid
 sequenceDiagram
