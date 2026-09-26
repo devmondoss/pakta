@@ -41,19 +41,10 @@ function stageIntroCopy(stage: number, payables: Payable[]): { title: string; bo
   }
 }
 
-/** Qué tan lejos llegó un payable individual en el pipeline. */
-function payableStage(p: Payable): number {
-  if (p.status === "BLOCKED") return 2; // Resolución
-  // El proof ya está calculado en cuanto el payable es READY (se deriva
-  // en vivo, no es un paso que quede pendiente por su cuenta) — lo que
-  // falta de verdad es el settlement.
-  if (p.status === "READY") return 4;
-  return 5; // SETTLED, reconciliado o no — de cualquier forma ya llegó al final del pipeline.
-}
-
 /**
- * El nodo que se enciende es el más avanzado que alcanzó CUALQUIER
- * payable del batch — no el más atrasado. Un batch real procesa varios
+ * El nodo que se enciende muestra el siguiente trabajo pendiente del lote.
+ * Settlement conserva prioridad mientras exista un payable READY; solo al
+ * vaciar esa cola se pasa a Reconciliación. Un batch real procesa varios
  * payables en paralelo: dos de las cuatro excepciones canónicas
  * (DUPLICATE_INVOICE, PO_AMOUNT_MISMATCH) no tienen ninguna acción de
  * resolución en esta UI, así que esos payables se quedan BLOCKED para
@@ -80,7 +71,14 @@ function computeStage(
   if (phase === "processing") return { index: processingStage, finished: false };
   if (payables.length === 0) return { index: 0, finished: false }; // nada cargado todavía
 
-  const index = Math.max(...payables.map(payableStage));
+  // Un settlement ya confirmado no debe adelantar el tablero a
+  // Reconciliación si todavía hay otros payables READY. El worker automático
+  // vive en Settlement (etapa 4), por lo que saltar a 5 tras el primer pago
+  // dejaba el lote a medias y el resumen mostraba solo ese primer importe.
+  const hasReady = payables.some((p) => p.status === "READY");
+  const hasSettled = payables.some((p) => p.status === "SETTLED");
+  const hasBlocked = payables.some((p) => p.status === "BLOCKED");
+  const index = hasReady ? 4 : hasSettled ? 5 : hasBlocked ? 2 : 1;
   // Las excepciones bloqueadas permanecen en Resolución hasta que un humano
   // actúe. No deben impedir que el carril de settlement cierre para los
   // payables que sí llegaron a estar listos y ya fueron conciliados.
@@ -176,10 +174,14 @@ export function ControlRoomFlow({
   }
 
   const intro = introStage !== null ? stageIntroCopy(introStage, payablesRef.current) : null;
-  const sessionSettled = payables.filter(
-    (payable) => payable.status === "SETTLED" && !sessionStartSettlementsRef.current.has(payable.payableId),
+  const sessionCandidates = payables.filter(
+    (payable) => payable.status !== "BLOCKED" && !sessionStartSettlementsRef.current.has(payable.payableId),
   );
-  const sessionFinished = phase === "done" && sessionSettled.length > 0 && sessionSettled.every((payable) => payable.settlement?.erpPostingStatus === "RECONCILED");
+  const sessionSettled = sessionCandidates.filter((payable) => payable.status === "SETTLED");
+  const sessionFinished =
+    phase === "done" &&
+    sessionCandidates.length > 0 &&
+    sessionCandidates.every((payable) => payable.status === "SETTLED" && payable.settlement?.erpPostingStatus === "RECONCILED");
 
   useEffect(() => {
     if (!hasActed || !sessionFinished || completionShownRef.current) return;
