@@ -83,6 +83,7 @@ export function IntakeFlow({
   const [error, setError] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [showVariants, setShowVariants] = useState(false);
+  const [showUpload, setShowUpload] = useState(false);
   const [variants, setVariants] = useState<{ index: number; label: string }[] | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -202,77 +203,78 @@ export function IntakeFlow({
   return (
     <div>
       {state === "idle" && (
-        <div
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragOver(true);
-          }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDragOver(false);
-            const file = e.dataTransfer.files[0];
-            if (file) ingest(file);
-          }}
-          onClick={() => inputRef.current?.click()}
-          className={`intake-dropzone cursor-pointer ${dragOver ? "intake-dropzone-active" : ""}`}
-        >
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".xlsx,.pdf"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) ingest(file);
-            }}
-          />
-          <div>
-            <p>Arrastrá un workbook o una factura acá, o <mark>elegí un archivo</mark></p>
-            <p className="mt-1 font-mono text-[10px]">.xlsx con VENDORS, PO, INVOICES, RECEIPTS, APPROVALS · .pdf de una factura (lectura con IA)</p>
-          </div>
-        </div>
-      )}
+        <div className="intake-primary">
+          <p className="intake-primary-label">Empezá la demo</p>
+          <div className="relative flex justify-center">
+            <button
+              type="button"
+              onClick={() => setShowVariants((v) => !v)}
+              className="intake-primary-cta"
+            >
+              <PlayCircle size={18} strokeWidth={2.2} />
+              Cargar dataset de prueba
+            </button>
 
-      {state === "idle" && (
-        <div className="relative mt-3 flex items-center justify-center">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowVariants((v) => !v);
-            }}
-            className="app-button-secondary inline-flex items-center gap-1.5"
-          >
-            <PlayCircle size={15} strokeWidth={2.2} />
-            Probar con un caso real
+            {showVariants && (
+              <div className="policy-popover absolute top-14 z-20 w-64 p-2" onClick={(e) => e.stopPropagation()}>
+                {!variants ? (
+                  <p className="p-2 text-xs text-muted">Cargando casos…</p>
+                ) : (
+                  <div className="demo-variant-list">
+                    <p className="demo-variant-heading">Elegí una industria</p>
+                    {variants.map((v) => (
+                      <button
+                        key={v.index}
+                        type="button"
+                        className="demo-variant-option"
+                        onClick={() => {
+                          setShowVariants(false);
+                          loadDemoData(v.index);
+                        }}
+                      >
+                        {v.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <button type="button" onClick={() => setShowUpload((v) => !v)} className="intake-secondary-link">
+            {showUpload ? "Ocultar" : "o subí tu propio .xlsx / factura .pdf (lectura con IA)"}
           </button>
 
-          {showVariants && (
+          {showUpload && (
             <div
-              className="policy-popover absolute top-9 z-20 w-64 p-2"
-              onClick={(e) => e.stopPropagation()}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOver(true);
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOver(false);
+                const file = e.dataTransfer.files[0];
+                if (file) ingest(file);
+              }}
+              onClick={() => inputRef.current?.click()}
+              className={`intake-dropzone intake-dropzone-compact cursor-pointer ${dragOver ? "intake-dropzone-active" : ""}`}
             >
-              {!variants ? (
-                <p className="p-2 text-xs text-muted">Cargando casos…</p>
-              ) : (
-                <div className="demo-variant-list">
-                  <p className="demo-variant-heading">Elegí una industria</p>
-                  {variants.map((v) => (
-                    <button
-                      key={v.index}
-                      type="button"
-                      className="demo-variant-option"
-                      onClick={() => {
-                        setShowVariants(false);
-                        loadDemoData(v.index);
-                      }}
-                    >
-                      {v.label}
-                    </button>
-                  ))}
-                </div>
-              )}
+              <input
+                ref={inputRef}
+                type="file"
+                accept=".xlsx,.pdf"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) ingest(file);
+                }}
+              />
+              <div>
+                <p>Arrastrá un workbook o una factura acá, o <mark>elegí un archivo</mark></p>
+                <p className="mt-1 font-mono text-[10px]">.xlsx con VENDORS, PO, INVOICES, RECEIPTS, APPROVALS · .pdf de una factura (lectura con IA)</p>
+              </div>
             </div>
           )}
         </div>
