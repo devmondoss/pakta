@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Payable, Vendor } from "@/lib/api";
+import { OnChainPanel } from "@/components/OnChainPanel";
 import { PayableCard, type PayableCardFocus } from "@/components/PayableCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { pushToast } from "@/lib/toast";
@@ -140,6 +141,7 @@ export function PayablesBoard({
       <p className="pipeline-slide-heading">
         {config.heading} · {items.length}
       </p>
+      {(stage === 4 || stage === 5) && <OnChainPanel />}
       {items.length === 0 ? (
         <p className="payable-column-empty">{config.empty}</p>
       ) : (
