@@ -1,7 +1,7 @@
 # Pakta — Esquema y Flujo Técnico
 
-**Checkpoint intermedio — hackathon**
-**Fecha:** 23 de septiembre de 2026 · última actualización 24 de septiembre de 2026
+**Arquitectura y estado de implementación — hackathon**
+**Última actualización:** 25 de septiembre de 2026
 **Repositorio:** [https://github.com/devmondoss/pakta](https://github.com/devmondoss/pakta)
 
 > Qué problema resolvemos, cómo se resuelve hoy sin Pakta, cómo lo resuelve Pakta, la arquitectura completa (frontend, backend, datos, agentic/AI, blockchain, infra), el diagrama de procesos, el diagrama de datos, el diagrama de construcción (roadmap), el diagrama de casos de uso y qué está construido hasta este checkpoint.
@@ -13,10 +13,10 @@ Todo lo demás en `docs/` es un **complemento** de este archivo, no un documento
 
 | Complemento                                                                   | Para qué bajar ahí                                                                                                        |
 | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `[product/Pakta_Documento_Maestro.md](../product/Pakta_Documento_Maestro.md)` | La tesis de producto completa, el modelo de datos §6-7 con ejemplos JSON, el modelo de exceptions §10, el demo script §25 |
-| `[Pakta_Plan_Implementacion.md](Pakta_Plan_Implementacion.md)`                | El plan de ejecución por fases con el detalle semana a semana (este doc solo tiene el roadmap resumido en Gantt, §6)      |
-| `[Pakta_Division_Trabajo.md](Pakta_Division_Trabajo.md)`                      | Historias de usuario con criterios de aceptación y DoD por comando, para ambos devs                                       |
-| `[Pakta_Dev2_Checklist.md](Pakta_Dev2_Checklist.md)`                          | Lo mismo que el anterior pero recortado solo a la parte de Dev 2, con el estado real actualizado historia por historia    |
+| [Documento maestro](../product/Pakta_Documento_Maestro.md) | La tesis de producto completa, el modelo de datos §6-7 con ejemplos JSON, el modelo de exceptions §10 y el demo script §25. |
+| [Plan de implementación](Pakta_Plan_Implementacion.md) | El plan de ejecución por fases y el detalle de la arquitectura objetivo. |
+| [División de trabajo](Pakta_Division_Trabajo.md) | Historias de usuario, criterios de aceptación y DoD por comando para ambos devs. |
+| [Checklist de Dev 2](Pakta_Dev2_Checklist.md) | Bitácora de ingestion, extracción, API y dashboard. |
 
 
 ---
@@ -110,8 +110,8 @@ Stack real, sin nada especulativo que no vayamos a usar en el hackathon: nada de
 | Componente     | Elección                                                                                             |
 | -------------- | ---------------------------------------------------------------------------------------------------- |
 | Framework      | Next.js (App Router) + React + TypeScript                                                            |
-| UI             | Tailwind + shadcn/ui — ya prototipado en el mockup del Control Room                                  |
-| Estado / datos | TanStack Query contra la API del backend                                                             |
+| UI             | Tailwind                                                                                              |
+| Estado / datos | `fetch` contra la API de Fastify, sin caché para reflejar la evaluación en vivo                      |
 | Auth           | **Ninguna por ahora.** No la necesita el demo del hackathon; se evalúa si el piloto real la requiere |
 
 
@@ -122,8 +122,8 @@ Stack real, sin nada especulativo que no vayamos a usar en el hackathon: nada de
 
 | Componente   | Elección                                                                                                                           |
 | ------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Runtime      | Node.js 24 + TypeScript                                                                                                            |
-| API HTTP     | Fastify — se conecta cuando el dashboard necesite datos reales; hoy el kernel corre como librería pura (`pnpm test`), sin servidor |
+| Runtime      | Node.js ≥22 + TypeScript                                                                                                          |
+| API HTTP     | Fastify — expone intake, policy, payables, proofs, wallets, receipts y settlement; el dashboard ya la consume                   |
 | Colas / jobs | **Ninguna por ahora.** No hay nada asíncrono en el flujo actual que lo justifique                                                  |
 | Validación   | Zod en cada frontera de confianza (spreadsheet, salida de IA, requests)                                                            |
 
@@ -310,9 +310,12 @@ erDiagram
 
 
 
-## 6. Diagrama de construcción — roadmap
+## 6. Diagrama de construcción — roadmap histórico
 
-Fechas estimadas desde hoy (23 sep), sujetas a ajuste según el cronograma final del hackathon.
+Este es el cronograma de planificación del 23 de septiembre; no representa el
+estado actual. El inventario vigente está en la sección 7 y el detalle de
+historias en `Pakta_Dev2_Checklist.md`, `contracts/README.md` y
+`deployments/testnet.json`.
 
 > Actualizado el 24 sep 2026. Las secciones/títulos usan solo guion simple (`-`) y sin `/` en los nombres de sección — algunos renderers de Mermaid más viejos rompen con em dash (`—`) o barras dentro de un nombre de `section`. Los nombres de tarea tampoco usan paréntesis `()` ni `+` — otro caso conocido de renderers de Mermaid viejos (por ejemplo la extensión de Mermaid de VSCode, según la versión) que no parsean bien esos caracteres dentro del texto de una tarea de gantt. El detalle que antes iba entre paréntesis está ahora como nota debajo del diagrama. El bloque de abajo pasa validación contra el parser oficial de `mermaid` (probado con `mermaid-cli` 11.x).
 
@@ -392,7 +395,7 @@ flowchart LR
 
 
 
-🟢 **Construido y testeado** (`main`, 60/60 tests) · 🟠 **En curso / siguiente** · ⚪ **Planeado**
+🟢 **Construido y testeado** · 🟠 **Integración pendiente** · ⚪ **Planeado**
 
 
 | Módulo                                                                   | Estado | Detalle                                                                                                                                  |
@@ -403,12 +406,12 @@ flowchart LR
 | Fixture del demo canónico (5 invoices, 28,400 USDC)                      | 🟢     | End-to-end: 1 READY + 4 BLOCKED exactos, reproducible con `pnpm test`                                                                    |
 | Exception Service (`@pakta/exception-service`)                           | 🟢     | `createWebhookNotifier` enruta por `ownerRole`, `notifyExceptions` no aborta el batch si un webhook falla                                |
 | Guardrail anti-alucinación (`resolveExtraction`, `@pakta/ai-extraction`) | 🟢     | Vendor/PO/wallet siempre se resuelven contra registros reales, nunca contra lo que dice la IA; probado contra el kernel real, no un mock |
-| AI Extraction Service — extracción (`extractInvoiceFromPdf`, NVIDIA NIM) | 🟠     | Código y tests con mocks listos; falta `NVIDIA_API_KEY` real y validar con PDFs de verdad                                                |
-| Dashboard (`apps/web`, Next.js)                                          | 🟠     | Existe como mockup navegable — sin datos reales todavía                                                                                  |
-| Proof-of-Payable Builder                                                 | 🟠     | Siguiente                                                                                                                                |
-| API layer (Fastify)                                                      | 🟠     | **Cuello de botella actual** — nada de lo de arriba llega al dashboard sin esto                                                          |
-| Soroban Contract (`payable-contract`)                                    | ⚪      | Dev 1 — no iniciado en este checkpoint                                                                                                   |
-| Settlement Adapter + Event Indexer                                       | ⚪      | Dev 1                                                                                                                                    |
+| AI Extraction Service — extracción (`extractInvoiceFromPdf`, NVIDIA NIM) | 🟢     | Provider agnóstico con pruebas unitarias e integración opcional con NVIDIA NIM.                                                          |
+| Dashboard (`apps/web`, Next.js)                                          | 🟢     | Lee datos reales desde Fastify; intake, receipts, wallets y revalidación tienen acciones de UI.                                         |
+| Proof-of-Payable Builder                                                 | 🟢     | Construye el schema compartido y se expone en `GET /payables/:id/proof`.                                                                |
+| API layer (Fastify)                                                      | 🟢     | Persiste datos en Neon y sirve los endpoints que consume el dashboard.                                                                  |
+| Soroban Contract (`payable-contract`)                                    | 🟢     | PayableGate v3 desplegado, inicializado y fondeado en testnet; ver `deployments/testnet.json`.                                          |
+| Settlement Adapter + Event Indexer                                       | 🟠     | El script de verificación testnet comprueba el money path; faltan el adapter integrado con la API y el indexer persistente.           |
 
 
 **Resultado verificable hoy:**
@@ -551,12 +554,9 @@ Fuente editable: `docs/implementation/assets/dev2-use-case-diagram.svg`.
 
 ### 10.3 Lo que este diagrama deja en evidencia
 
-El dashboard actual (`apps/web`) ya tiene una pantalla por módulo, pero **es de solo lectura** — ningún actor puede hacer clic en "confirmar receipt" o "reatestiguar wallet" todavía. El flujo de arriba (`ROUTE → owner actúa → revalidate()`) es puramente conceptual mientras eso no exista. Eso apunta a lo que realmente falta antes de agentes más sofisticados:
+El dashboard ya conecta las acciones operativas disponibles: confirmar receipt, registrar/atestiguar una wallet y revalidar un payable. La API de Fastify persiste esos cambios y `GET /payables` vuelve a evaluar el kernel contra el estado actual.
 
-1. **Una acción real por exception** — que el Exceptions module deje de ser una lista y tenga un botón "resolver" por owner, que dispare `revalidate()` contra el kernel.
-2. **La API layer** que conecte ese botón con el backend (sigue siendo el cuello de botella, como ya habíamos visto).
-
-Recién con eso resuelto tiene sentido meterle agentes que *actúen* en nombre de un owner — hoy no hay ninguna acción de owner que un agente pueda automatizar, porque el owner mismo no tiene cómo actuar todavía.
+Lo que falta antes de delegar acciones a agentes es otra capa de control: identidad y roles por owner, flujos de aprobación y una integración de settlement que revalide el proof antes de invocar el contrato. La UI no debe convertirse en una autorización alternativa al gate determinístico.
 
 ---
 
@@ -564,6 +564,6 @@ Recién con eso resuelto tiene sentido meterle agentes que *actúen* en nombre d
 
 ## 11. Próximo paso
 
-Dev 1 construye `contracts/payable-contract` (Soroban): vault prefondeado con caps por payable y ventana, registro de proof firmado, revocación y `settle(payable_id)` autorizado sin parámetros de destinatario ni monto. `attest_lifecycle` solo emite testimonios del issuer para auditoría. El scaffold compila localmente; deploy e invocación en testnet siguen pendientes. En paralelo, Dev 2 conecta AI Extraction (LangGraph + Claude Agent SDK / Google ADK, con NVIDIA NIM como fallback de bajo costo) y arma el Exception Service real.
+El contrato `contracts/payable-contract` ya corre como vault prefondeado en Stellar testnet: registra proofs firmados, evita replay, permite revocación y ejecuta `settle(payable_id)` sin parámetros de destinatario ni monto. El proveedor de extracción actual es NVIDIA NIM y el dashboard ya consume la API real.
 
-Del lado de Dev 2, el cuello de botella dejó de ser el kernel o el Exception Service (ambos ✅) y pasó a ser la **API layer (Fastify)**: sin eso, ni la extracción por IA ni el dashboard pueden dejar de ser mock. Ese es el siguiente paso real, no una historia más de la lista.
+El siguiente hito es cerrar la integración entre el proof emitido por la API y el settlement on-chain: un adapter que valide el deployment y la vigencia, reporte el resultado a `POST /payables/:id/settlement` y un indexer que reconcilie eventos de Stellar de forma persistente.

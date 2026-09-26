@@ -72,10 +72,10 @@ Invoice, PO, receipt, monto, presupuesto y firma del agente pueden estar perfect
 
 | | |
 |---|---|
-| **Frontend** | Next.js 15 + React 19 · TypeScript · TanStack Query/Table · shadcn/ui + Tailwind |
-| **Backend** | Node.js 22 + TypeScript · Fastify · Zod · BullMQ/Redis |
-| **Datos** | PostgreSQL (Supabase) · S3/Supabase Storage · pgvector (fase 2) |
-| **AI / Agentic** | Claude (Sonnet/Opus, structured output) · LangGraph / Claude Agent SDK |
+| **Frontend** | Next.js 16 + React 19 · TypeScript · Tailwind |
+| **Backend** | Node.js ≥22 + TypeScript · Fastify · Zod |
+| **Datos** | PostgreSQL vía Neon |
+| **AI / Agentic** | NVIDIA NIM (API compatible con OpenAI) detrás de una interfaz de extracción agnóstica de proveedor |
 | **Blockchain** | Soroban (Rust) · Stellar SDK · USDC vía Stellar Asset Contract (SAC) · SEP-10/SEP-45 |
 | **Infra** | Vercel · Fly.io/Railway → AWS ECS · GitHub Actions · Sentry |
 
@@ -102,6 +102,26 @@ En el MVP, Treasury conserva sus claves y prefondea un **vault Soroban con custo
 
 ---
 
+## 🚀 Ejecutarlo localmente
+
+```bash
+pnpm install
+cp .env.example .env
+# completa DATABASE_URL en .env
+pnpm --filter @pakta/api dev
+pnpm --filter @pakta/web dev
+```
+
+La API se inicia en `http://localhost:4000` y el dashboard en
+`http://localhost:3000`. `DATABASE_URL` es obligatoria; `NVIDIA_API_KEY` solo
+es necesaria para la ingesta de PDFs. Para verificar el contrato Soroban:
+
+```bash
+pnpm contract:test
+```
+
+---
+
 ## 📄 Documentación
 
 Toda la documentación vive en [`docs/`](docs/), organizada por categoría (`product`, `implementation`, `assets`) con sus tags — ver el [índice completo](docs/README.md).
@@ -109,6 +129,8 @@ Toda la documentación vive en [`docs/`](docs/), organizada por categoría (`pro
 - [`docs/product/Pakta_Documento_Maestro.md`](docs/product/Pakta_Documento_Maestro.md) — tesis de producto completa, arquitectura, modelo de excepciones, threat model y referencias
 - [`docs/implementation/Pakta_Plan_Implementacion.md`](docs/implementation/Pakta_Plan_Implementacion.md) — stack técnico, arquitectura de servicios y plan de ejecución por fases
 - [`docs/implementation/Pakta_Division_Trabajo.md`](docs/implementation/Pakta_Division_Trabajo.md) — división de trabajo del equipo (Web3/Settlement vs Agentic/AI)
+- [`docs/implementation/Pakta_Arquitectura_Flujo.md`](docs/implementation/Pakta_Arquitectura_Flujo.md) — arquitectura y estado actual de los módulos
+- [`docs/implementation/Pakta_Dev2_Checklist.md`](docs/implementation/Pakta_Dev2_Checklist.md) — estado de ingestion, extracción, API y dashboard
 
 ---
 

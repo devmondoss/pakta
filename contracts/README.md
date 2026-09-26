@@ -162,18 +162,18 @@ El seed del issuer se pasa por variable de entorno y nunca se escribe en el repo
 | **Initialize tx** | [`1a57e1f2…92cfbf`](https://stellar.expert/explorer/testnet/tx/1a57e1f27423d488f2e8d710e680c99cdff0f86a4d7bd471cff6631a5792cfbf) |
 | **Estado** | Inicializado como vault con caps, fondeado con 100 000 USDC |
 
-Está sin inicializar a propósito: `initialize` es la llamada que elige el modelo de
-custodia, y esa decisión sigue abierta con el equipo. El contrato ya responde:
+La decisión de custodia ya está tomada para el demo: el **v3** está inicializado
+como vault y fondeado. Para consultar su configuración, usa el ID vigente del
+manifiesto:
 
 ```powershell
-stellar contract invoke --id CCF2BKQMKRHOJWUAZPKD72PLWVKHDED6TBOOF7ZJYUXH4OZAOCDLBGON `
-  --source deployer --network testnet -- contract_version
-# -> 2
-
-stellar contract invoke --id CCF2BKQMKRHOJWUAZPKD72PLWVKHDED6TBOOF7ZJYUXH4OZAOCDLBGON `
+stellar contract invoke --id CDKC6UYM7JFZOIR3DSSHZWSNFB4NTYQ3X3AVJJ5MIU3UH6H4NBQON5GB `
   --source deployer --network testnet -- get_config
-# -> Error(Contract, #2)  = NotInitialized, el error tipado viajando correctamente
 ```
+
+`CCF2BKQMKRHOJWUAZPKD72PLWVKHDED6TBOOF7ZJYUXH4OZAOCDLBGON` es el v2
+supersedido. Se conserva únicamente como referencia histórica y no debe usarse
+para registrar ni liquidar payables.
 
 Identificadores completos y versionados en [`../deployments/testnet.json`](../deployments/testnet.json).
 

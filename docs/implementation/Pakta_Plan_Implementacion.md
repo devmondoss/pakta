@@ -39,12 +39,12 @@ Regla de diseño no negociable: **el LLM nunca escribe directamente al kernel de
 
 | Componente | Elección | Motivo |
 |---|---|---|
-| Framework | Next.js 15 (App Router) + React 19 | SSR para dashboard, server actions para mutaciones simples, un solo repo para UI |
+| Framework | Next.js 16 (App Router) + React 19 | Dashboard en el mismo monorepo que consume la API de Fastify |
 | Lenguaje | TypeScript estricto | Los tipos de Payable/Exception/Proof se comparten con el backend |
-| Estado UI | TanStack Query | Cache y revalidación de payables/exceptions sin Redux |
-| Componentes | shadcn/ui + Tailwind | Velocidad de hackathon, consistente con el mockup ya construido |
-| Tablas grandes | TanStack Table | Payables queue con cientos de filas |
-| Realtime | Server-Sent Events o Supabase Realtime | Reflejar `BLOCKED → REVALIDATING → READY → SETTLED` sin polling agresivo |
+| Estado UI | `fetch` sin caché + refresh de ruta | Refleja inmediatamente los cambios de payables y excepciones del MVP |
+| Componentes | Tailwind | Implementación actual del dashboard |
+| Tablas grandes | Por definir para piloto | El MVP aún no tiene una cola de cientos de filas |
+| Realtime | Por definir para piloto | No es necesario para el flujo actual |
 
 El mockup ya publicado (Control Room) sirve como spec visual: pills de estado, side panel de exception, evidence checklist, proof viewer y reconciliation chain se reconstruyen como componentes reales sobre datos verdaderos.
 
@@ -53,17 +53,17 @@ El mockup ya publicado (Control Room) sirve como spec visual: pills de estado, s
 | Componente | Elección | Motivo |
 |---|---|---|
 | Runtime | Node.js 22 + TypeScript | Comparte tipos con frontend, ecosistema maduro para integraciones (Stellar SDK, parsers) |
-| Framework API | Fastify (o Next.js Route Handlers si se prioriza monorepo simple) | Bajo overhead, buen soporte de schemas (Zod/TypeBox) |
+| Framework API | Fastify | API actual del monorepo; bajo overhead y buen soporte de schemas |
 | Validación | Zod en el límite de cada input (AI output, uploads, webhooks) | El kernel nunca confía en un objeto sin validar, incluida la salida del LLM |
 | Rules engine | Módulo TypeScript propio, versionado (`policy_version`), no un motor de reglas genérico de terceros | El documento maestro exige reglas explícitas, auditable y versionadas — no una black box |
-| Jobs / colas | BullMQ sobre Redis | Reintentos de revalidación, notificaciones, polling de eventos Soroban |
-| Auth | Clerk o Auth.js + roles (AP, Procurement, Vendor Master, Treasury, Controller) | Mapear directamente a los `owner_role` de las exceptions (sección 10 del maestro) |
+| Jobs / colas | Fuera del MVP actual | Se evaluará para reintentos, notificaciones e indexación persistente |
+| Auth | Fuera del MVP actual | El piloto deberá mapear roles a los `owner_role` de las exceptions |
 
 ### 2.3 Datos
 
 | Componente | Elección | Motivo |
 |---|---|---|
-| Base de datos | PostgreSQL (Supabase o RDS) | Relacional: Vendor, PO, Invoice, Receipt, Payable, Exception, ProofOfPayable, Settlement como tablas con foreign keys reales |
+| Base de datos | PostgreSQL vía Neon | Relacional: Vendor, PO, Invoice, Receipt, Payable, Exception, ProofOfPayable, Settlement como tablas con foreign keys reales |
 | Storage de documentos | S3 / Supabase Storage | PDFs e inputs originales quedan off-chain (sección 13.1); solo se guarda el hash |
 | Vector/búsqueda (opcional Fase 2) | pgvector | Matching difuso invoice↔PO cuando no hay IDs exactos |
 
@@ -73,9 +73,9 @@ Canonical Payable Model (sección 7.0) se implementa como el esquema Postgres ce
 
 | Componente | Elección | Motivo |
 |---|---|---|
-| Modelo principal | Claude (Sonnet/Opus vía API) con structured output (tool use) | Extracción de invoices/PO, clasificación de emails, redacción de resúmenes de exception |
-| Orquestación de agentes | Claude Agent SDK o LangGraph si se necesita multi-agent explícito (Payables Agent → Vendor Verification Agent → Operations Agent, sección 9.3) | Mantiene cada agente con tool-boundaries estrictos |
-| Document parsing | Claude con vision para PDFs/escaneados + fallback OCR (Tesseract) | PDFs de invoices no siempre son texto nativo |
+| Modelo principal | NVIDIA NIM, compatible con OpenAI | Extracción de invoices con una interfaz de proveedor agnóstica |
+| Orquestación de agentes | Fuera del MVP actual | El multi-agent explícito queda para una fase posterior |
+| Document parsing | Extracción de texto del PDF + NVIDIA NIM | El proveedor actual recibe texto normalizado, no el PDF nativo |
 | Contrato de salida | JSON Schema estricto por tipo de tarea (extracción, matching, exception summary) | Cualquier campo fuera de schema se descarta antes de llegar al kernel |
 
 ### 2.5 Blockchain / Settlement
@@ -101,8 +101,8 @@ Canonical Payable Model (sección 7.0) se implementa como el esquema Postgres ce
 |---|---|---|
 | Hosting frontend | Vercel | Deploy inmediato desde el mismo repo Next.js |
 | Hosting backend/workers | Fly.io o Railway para hackathon; migrar a AWS (ECS Fargate) en piloto | Bajo setup inicial, ruta clara de escalamiento |
-| Base de datos gestionada | Supabase (Postgres + Storage + Auth opcional) | Un solo proveedor cubre DB, storage y realtime en el MVP |
-| Secrets | Doppler o Vercel/Fly secrets | Keys de Stellar, API keys de Claude, nunca en el repo |
+| Base de datos gestionada | Neon | PostgreSQL de la API actual |
+| Secrets | Variables del entorno de despliegue | Keys de Stellar y de NVIDIA NIM nunca van al repo |
 | CI/CD | GitHub Actions: lint + typecheck + tests en PR, deploy automático en merge a `main` | Estándar, sin fricción |
 | Monitoreo | Sentry (errores) + logs estructurados (pino) → Axiom o Logtail | Trazabilidad de exceptions reales del sistema (no confundir con las "exceptions" de negocio) |
 | Contratos Soroban | Deploy y pruebas con Soroban CLI + `soroban-test` en testnet | Pipeline separado del backend, versionado por contrato |
@@ -119,7 +119,7 @@ flowchart TB
 
     subgraph API["Backend (Fastify)"]
         ING[Ingestion Service<br/>xlsx/csv/pdf/email]
-        AI[AI Extraction Service<br/>Claude structured output]
+        AI[AI Extraction Service<br/>NVIDIA NIM structured output]
         KERNEL[Deterministic Control Kernel<br/>versioned rules]
         EXC[Exception Service]
         PROOF[Proof-of-Payable Builder]
@@ -127,9 +127,7 @@ flowchart TB
     end
 
     subgraph Data
-        PG[(Postgres)]
-        S3[(Object Storage)]
-        REDIS[(Redis / BullMQ)]
+        PG[(Neon Postgres)]
     end
 
     subgraph Chain["Stellar / Soroban"]
@@ -139,20 +137,18 @@ flowchart TB
     end
 
     UI <--> API
-    ING --> S3
     ING --> AI --> KERNEL
     KERNEL -->|blocked| EXC --> AI
     KERNEL -->|ready| PROOF --> SET --> SC
     SC --> SAC
     SC --> IDX --> PG
     API <--> PG
-    API <--> REDIS
 ```
 
 ### Servicios y su responsabilidad
 
 1. **Ingestion Service** — normaliza xlsx/CSV/PDF/email al Canonical Payable Model. Un adapter por fuente; agregar QuickBooks/Odoo/Zoho en Fase 2 es un adapter nuevo, no un rediseño.
-2. **AI Extraction Service** — llama a Claude con schemas estrictos; cada salida se marca `confidence` y `source_excerpt` para auditabilidad. Nunca escribe directo a `payables`; escribe a una tabla `extraction_proposals` que el kernel consume.
+2. **AI Extraction Service** — usa NVIDIA NIM detrás de `InvoiceExtractor`, con schemas estrictos. Cada salida se marca con `confidence` y `source_excerpt`; `resolveExtraction` la contrasta con vendor, PO y wallet conocidos antes de persistir un payable.
 3. **Deterministic Control Kernel** — evalúa las reglas de la sección 7.3 del maestro (`invoice.vendor_id == po.vendor_id`, tolerancias, duplicados, wallet attestation, approvals, budget, expiry). Cada regla es una función pura testeable con unit tests.
 4. **Exception Service** — crea el objeto típico (`reason_code`, `owner_role`, `required_action`, `auto_revalidate`), enruta notificación (email/webhook) y expone el endpoint de resolución que dispara revalidación.
 5. **Proof-of-Payable Builder** — arma el objeto firmado/hasheado (sección 6.1) y lo persiste antes de invocar settlement.

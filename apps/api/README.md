@@ -114,7 +114,9 @@ Once this call succeeds, `GET /payables` reports that payable as
 | Method | Path | What it does |
 |---|---|---|
 | GET | `/health` | Liveness check |
-| GET | `/payables` | All 5 demo payables, live-evaluated (never cached/stale) |
+| POST | `/ingest` | Ingesta un `.xlsx` o PDF vía `multipart/form-data`; el PDF se valida contra fuentes conocidas antes de persistirse. |
+| GET | `/policy` | Devuelve la policy determinística activa. |
+| GET | `/payables` | Payables persistidos, evaluados en vivo (la primera ejecución siembra los cinco del demo). |
 | GET | `/payables/:id/proof` | Builds a `ProofOfPayable` — 409 if not READY |
 | POST | `/payables/:id/revalidate` | Re-runs the kernel now, returns the fresh result |
 | GET | `/payables/:id/settlement` | Reads back a recorded settlement — 404 if none |
