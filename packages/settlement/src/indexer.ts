@@ -155,14 +155,14 @@ export class EventIndexer {
    */
   async poll(maxPages = 25): Promise<IndexerReport> {
     const report: IndexerReport = { fetched: 0, recorded: 0, settlementsRecorded: [], unknownSettlements: [] };
-    let cursor = this.#store.getCursor(this.#name)?.cursor;
+    let cursor = (await this.#store.getCursor(this.#name))?.cursor;
 
     for (let page = 0; page < maxPages; page += 1) {
       const result = await this.#source.fetch({ cursor });
       report.fetched += result.events.length;
 
       for (const event of result.events) {
-        const isNew = this.#store.recordChainEvent({
+        const isNew = await this.#store.recordChainEvent({
           id: event.id,
           type: event.type,
           ledger: event.ledger,
@@ -172,12 +172,12 @@ export class EventIndexer {
         });
         if (!isNew) continue;
         report.recorded += 1;
-        this.#project(event, report);
+        await this.#project(event, report);
       }
 
       const next = result.cursor ?? cursor;
       // Persist after every page, so a crash mid-scan resumes where it was.
-      this.#store.setCursor(this.#name, { cursor: next, ledger: result.latestLedger });
+      await this.#store.setCursor(this.#name, { cursor: next, ledger: result.latestLedger });
       if (next === cursor && result.events.length === 0) break;
       cursor = next;
     }
@@ -185,28 +185,28 @@ export class EventIndexer {
     return report;
   }
 
-  #project(event: GateEvent, report: IndexerReport): void {
+  async #project(event: GateEvent, report: IndexerReport): Promise<void> {
     if (!event.payableIdHash) return;
 
     const status = PROOF_STATUS_BY_EVENT[event.type];
     if (status) {
-      const proof = this.#store.getProofByIdHash(event.payableIdHash);
+      const proof = await this.#store.getProofByIdHash(event.payableIdHash);
       // Never walk a proof backwards: a late REGISTERED must not undo SETTLED.
       if (proof && (status !== "REGISTERED" || proof.status === "SIGNED")) {
-        this.#store.setProofStatus(event.payableIdHash, status, status === "REGISTERED" ? event.txHash : undefined);
+        await this.#store.setProofStatus(event.payableIdHash, status, status === "REGISTERED" ? event.txHash : undefined);
       }
       return;
     }
 
     if (event.type !== "settlement_executed") return;
 
-    const proof = this.#store.getProofByIdHash(event.payableIdHash);
+    const proof = await this.#store.getProofByIdHash(event.payableIdHash);
     if (!proof) {
       report.unknownSettlements.push(event.payableIdHash);
       return;
     }
-    if (!this.#store.getSettlement(proof.payableId)) {
-      this.#store.recordSettlement({
+    if (!await this.#store.getSettlement(proof.payableId)) {
+      await this.#store.recordSettlement({
         payableId: proof.payableId,
         invoiceId: proof.invoiceId,
         poId: proof.poId,
@@ -221,7 +221,7 @@ export class EventIndexer {
       });
       report.settlementsRecorded.push(proof.payableId);
     }
-    this.#store.setProofStatus(event.payableIdHash, "SETTLED");
-    this.#store.addSettledFingerprint(`${proof.vendorId}|${proof.amount}`, `${proof.payableId} settled in ${event.txHash}`);
+    await this.#store.setProofStatus(event.payableIdHash, "SETTLED");
+    await this.#store.addSettledFingerprint(`${proof.vendorId}|${proof.amount}`, `${proof.payableId} settled in ${event.txHash}`);
   }
 }

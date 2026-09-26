@@ -1,15 +1,17 @@
-const STATUS_STYLES = {
-  READY: { pill: "bg-ready-bg text-ready", dot: "bg-ready" },
-  BLOCKED: { pill: "bg-blocked-bg text-blocked", dot: "bg-blocked" },
-  // Paid on Stellar — distinct from READY so nobody reads it as still pending.
-  SETTLED: { pill: "bg-sky-500/10 text-sky-700 dark:text-sky-400", dot: "bg-sky-500" },
-} as const;
-
-export function StatusBadge({ status }: { status: keyof typeof STATUS_STYLES }) {
-  const style = STATUS_STYLES[status];
+export function StatusBadge({ status }: { status: "READY" | "BLOCKED" | "SETTLED" }) {
+  const styles: Record<string, string> = {
+    READY: "bg-ready-bg text-ready",
+    BLOCKED: "bg-blocked-bg text-blocked",
+    SETTLED: "bg-settled-bg text-settled",
+  };
+  const dotStyles: Record<string, string> = {
+    READY: "bg-ready",
+    BLOCKED: "bg-blocked",
+    SETTLED: "bg-settled",
+  };
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${style.pill}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${styles[status]}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${dotStyles[status]}`} />
       {status}
     </span>
   );
@@ -18,8 +20,8 @@ export function StatusBadge({ status }: { status: keyof typeof STATUS_STYLES }) 
 export function SeverityBadge({ severity }: { severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" }) {
   const styles: Record<string, string> = {
     LOW: "bg-border/50 text-muted",
-    MEDIUM: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-    HIGH: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
+    MEDIUM: "bg-live-bg text-live",
+    HIGH: "bg-[#ff9f5a]/15 text-[#ff9f5a]",
     CRITICAL: "bg-blocked-bg text-blocked",
   };
   return (

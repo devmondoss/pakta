@@ -8,62 +8,62 @@ export class MemorySettlementStore implements SettlementStore {
   readonly cursors = new Map<string, { cursor?: string; ledger?: number }>();
   readonly settledFingerprints = new Map<string, string>();
 
-  upsertProof(proof: ProofRecord): void {
+  async upsertProof(proof: ProofRecord): Promise<void> {
     this.proofs.set(proof.payableIdHash, { ...proof });
   }
 
-  getProofByIdHash(payableIdHash: string): ProofRecord | undefined {
+  async getProofByIdHash(payableIdHash: string): Promise<ProofRecord | undefined> {
     return this.proofs.get(payableIdHash);
   }
 
-  getProof(payableId: string): ProofRecord | undefined {
+  async getProof(payableId: string): Promise<ProofRecord | undefined> {
     return [...this.proofs.values()].find((p) => p.payableId === payableId);
   }
 
-  setProofStatus(payableIdHash: string, status: ProofRecord["status"], registerTxHash?: string): void {
+  async setProofStatus(payableIdHash: string, status: ProofRecord["status"], registerTxHash?: string): Promise<void> {
     const proof = this.proofs.get(payableIdHash);
     if (!proof) return;
     proof.status = status;
     if (registerTxHash) proof.registerTxHash = registerTxHash;
   }
 
-  listOpenRegistrations(): ProofRecord[] {
+  async listOpenRegistrations(): Promise<ProofRecord[]> {
     return [...this.proofs.values()].filter((p) => p.status === "REGISTERED");
   }
 
-  recordSettlement(settlement: SettlementRecord): void {
+  async recordSettlement(settlement: SettlementRecord): Promise<void> {
     if (!this.settlements.has(settlement.payableId)) this.settlements.set(settlement.payableId, { ...settlement });
   }
 
-  getSettlement(payableId: string): SettlementRecord | undefined {
+  async getSettlement(payableId: string): Promise<SettlementRecord | undefined> {
     return this.settlements.get(payableId);
   }
 
-  listSettlements(): SettlementRecord[] {
+  async listSettlements(): Promise<SettlementRecord[]> {
     return [...this.settlements.values()];
   }
 
-  recordChainEvent(event: ChainEventRecord): boolean {
+  async recordChainEvent(event: ChainEventRecord): Promise<boolean> {
     if (this.events.has(event.id)) return false;
     this.events.set(event.id, event);
     return true;
   }
 
-  findChainEvent(payableIdHash: string, type: string): ChainEventRecord | undefined {
+  async findChainEvent(payableIdHash: string, type: string): Promise<ChainEventRecord | undefined> {
     return [...this.events.values()]
       .filter((e) => e.payableIdHash === payableIdHash && e.type === type)
       .sort((a, b) => b.ledger - a.ledger)[0];
   }
 
-  getCursor(name: string) {
+  async getCursor(name: string) {
     return this.cursors.get(name);
   }
 
-  setCursor(name: string, value: { cursor?: string; ledger?: number }): void {
+  async setCursor(name: string, value: { cursor?: string; ledger?: number }): Promise<void> {
     this.cursors.set(name, value);
   }
 
-  addSettledFingerprint(fingerprint: string, note: string): void {
+  async addSettledFingerprint(fingerprint: string, note: string): Promise<void> {
     if (!this.settledFingerprints.has(fingerprint)) this.settledFingerprints.set(fingerprint, note);
   }
 }

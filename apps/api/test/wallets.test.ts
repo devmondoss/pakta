@@ -1,11 +1,14 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
+import { resetDb } from "@pakta/db";
 import { buildApp } from "../src/app.js";
+import { getDb } from "../src/db.js";
 import type { ApiPayable } from "../src/mapPayable.js";
 
 let app: FastifyInstance;
 
 beforeAll(async () => {
+  await resetDb(await getDb());
   app = await buildApp();
 });
 

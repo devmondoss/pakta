@@ -7,7 +7,10 @@ export default mergeConfig(
     test: {
       name: "api",
       include: ["test/**/*.test.ts"],
-      env: { DB_PATH: ":memory:" },
+      // Real, shared Neon DB now — files must not run concurrently, or
+      // they'd race on the same fixture payables/vendors.
+      fileParallelism: false,
+      testTimeout: 20_000,
     },
   }),
 );

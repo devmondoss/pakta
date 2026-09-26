@@ -82,14 +82,14 @@ export class SettlementAdapter {
 
   async settle(signed: SignedProofOfPayable, context: SettlementContext): Promise<SettlementOutcome> {
     const prepared = this.#verify(signed);
-    this.#rememberProof(signed, prepared, context);
+    await this.#rememberProof(signed, prepared, context);
 
     let onChain = await this.#gate.getPayable(prepared.payableIdHash);
     let registerTx: SubmittedTx | undefined;
 
     if (onChain?.status === "SETTLED") return this.#alreadySettled(signed, prepared, context);
     if (onChain?.status === "EXPIRED" || onChain?.status === "REVOKED") {
-      this.#store.setProofStatus(prepared.payableIdHash, onChain.status);
+      await this.#store.setProofStatus(prepared.payableIdHash, onChain.status);
       throw new SettlementRefused(
         `${signed.payable_id} is ${onChain.status} on-chain and can no longer be settled`,
         "ALREADY_CLOSED",
@@ -107,7 +107,7 @@ export class SettlementAdapter {
       }
       onChain = await this.#gate.getPayable(prepared.payableIdHash);
       if (!onChain) throw new SettlementRefused(`${signed.payable_id} did not appear on-chain after registering`, "GATE_REFUSED");
-      this.#store.setProofStatus(prepared.payableIdHash, "REGISTERED", registerTx?.txHash);
+      await this.#store.setProofStatus(prepared.payableIdHash, "REGISTERED", registerTx?.txHash);
       if (onChain.status === "SETTLED") return this.#alreadySettled(signed, prepared, context);
     }
 
@@ -141,7 +141,7 @@ export class SettlementAdapter {
       erp_posting_status: "PENDING",
     });
 
-    this.#store.recordSettlement({
+    await this.#store.recordSettlement({
       payableId: signed.payable_id,
       invoiceId: context.invoiceId,
       poId: context.poId,
@@ -154,8 +154,8 @@ export class SettlementAdapter {
       erpPostingStatus: "PENDING",
       settledAt: this.#now().toISOString(),
     });
-    this.#store.setProofStatus(prepared.payableIdHash, "SETTLED");
-    this.#store.addSettledFingerprint(context.fingerprint, `${signed.payable_id} settled in ${settleTx.txHash}`);
+    await this.#store.setProofStatus(prepared.payableIdHash, "SETTLED");
+    await this.#store.addSettledFingerprint(context.fingerprint, `${signed.payable_id} settled in ${settleTx.txHash}`);
 
     return { status: "SETTLED", settlement, registerTx, settleTx };
   }
@@ -217,18 +217,18 @@ export class SettlementAdapter {
    * transaction and ledger, so the settlement is rebuilt from the chain rather
    * than left unrecorded.
    */
-  #alreadySettled(
+  async #alreadySettled(
     signed: SignedProofOfPayable,
     prepared: PreparedRegistration,
     context: SettlementContext,
-  ): SettlementOutcome {
-    this.#store.setProofStatus(prepared.payableIdHash, "SETTLED");
-    let record = this.#store.getSettlement(signed.payable_id);
+  ): Promise<SettlementOutcome> {
+    await this.#store.setProofStatus(prepared.payableIdHash, "SETTLED");
+    let record = await this.#store.getSettlement(signed.payable_id);
 
     if (!record) {
-      const event = this.#store.findChainEvent(prepared.payableIdHash, "settlement_executed");
+      const event = await this.#store.findChainEvent(prepared.payableIdHash, "settlement_executed");
       if (event) {
-        this.#store.recordSettlement({
+        await this.#store.recordSettlement({
           payableId: signed.payable_id,
           invoiceId: context.invoiceId,
           poId: context.poId,
@@ -241,8 +241,8 @@ export class SettlementAdapter {
           erpPostingStatus: "PENDING",
           settledAt: this.#now().toISOString(),
         });
-        this.#store.addSettledFingerprint(context.fingerprint, `${signed.payable_id} settled in ${event.txHash}`);
-        record = this.#store.getSettlement(signed.payable_id);
+        await this.#store.addSettledFingerprint(context.fingerprint, `${signed.payable_id} settled in ${event.txHash}`);
+        record = await this.#store.getSettlement(signed.payable_id);
       }
     }
 
@@ -269,10 +269,10 @@ export class SettlementAdapter {
     };
   }
 
-  #rememberProof(signed: SignedProofOfPayable, prepared: PreparedRegistration, context: SettlementContext): void {
-    const existing = this.#store.getProofByIdHash(prepared.payableIdHash);
+  async #rememberProof(signed: SignedProofOfPayable, prepared: PreparedRegistration, context: SettlementContext): Promise<void> {
+    const existing = await this.#store.getProofByIdHash(prepared.payableIdHash);
     if (existing && existing.status !== "SIGNED") return;
-    this.#store.upsertProof({
+    await this.#store.upsertProof({
       payableId: signed.payable_id,
       payableIdHash: prepared.payableIdHash,
       proofHash: prepared.proofHash,

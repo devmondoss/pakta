@@ -32,7 +32,25 @@ export function parseJsonResponse(content: string): unknown {
   // Models occasionally wrap JSON in ```json fences despite instructions not to.
   const fenced = content.match(/```(?:json)?\s*([\s\S]*?)```/);
   const candidate = fenced ? fenced[1]! : content;
-  return JSON.parse(candidate);
+
+  try {
+    return JSON.parse(candidate);
+  } catch (err) {
+    // Observed in practice: an otherwise well-formed object with stray
+    // prose before/after it that survives the fence-stripping above.
+    // Slice to the outermost braces before giving up — cheaper than
+    // burning another full model round-trip on a corrective retry.
+    const start = candidate.indexOf("{");
+    const end = candidate.lastIndexOf("}");
+    if (start !== -1 && end > start) {
+      try {
+        return JSON.parse(candidate.slice(start, end + 1));
+      } catch {
+        // fall through
+      }
+    }
+    throw err;
+  }
 }
 
 /**

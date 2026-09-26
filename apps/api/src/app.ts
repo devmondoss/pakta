@@ -1,12 +1,14 @@
 import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
 import type { Vendor, VendorWallet } from "@pakta/canonical-model";
-import { attestWallet, registerWalletChange } from "@pakta/db";
+import { attestWallet, confirmReceipt, registerWalletChange } from "@pakta/db";
 import { buildProofOfPayable, ProofBuilderError } from "@pakta/proof-builder";
 import { GateError, SettlementRefused, type Deployment } from "@pakta/settlement";
 import { isAccountId, unitsToDecimal } from "@pakta/stellar-sdk-wrapper";
 import Fastify from "fastify";
 import { getDb } from "./db.js";
-import { evaluateLive, seedFromFixture } from "./demoData.js";
+import { evaluateLive } from "./demoData.js";
+import { ingestAndPersist, loadPolicy, seedIfEmpty } from "./ingest.js";
 import { toApiPayable, type SettledInfo } from "./mapPayable.js";
 import {
   createSettlementServices,
@@ -30,9 +32,10 @@ const CHAIN_DISABLED =
 export async function buildApp(options: BuildAppOptions = {}) {
   const app = Fastify({ logger: options.logger ?? true });
   await app.register(cors, { origin: true });
+  await app.register(multipart);
 
-  const db = getDb();
-  await seedFromFixture(db);
+  const db = await getDb();
+  await seedIfEmpty(db);
   const now = options.now ?? (() => new Date());
   const settlement: SettlementServices = createSettlementServices(db, {
     deployment: options.deployment,
@@ -40,15 +43,34 @@ export async function buildApp(options: BuildAppOptions = {}) {
     now,
   });
   const { store, deployment } = settlement;
+  /**
+   * The real intake endpoint — an uploaded `.xlsx` goes through
+   * `ingestWorkbook` and every resulting payable gets persisted to
+   * `@pakta/db`. No fixture, no re-derivation: whatever's in the DB
+   * after this call is exactly what `GET /payables` will show.
+   */
+  app.post("/ingest", async (request, reply) => {
+    const file = await request.file();
+    if (!file) return reply.code(400).send({ error: "no file uploaded (expected multipart field)" });
 
-  function settledInfo(payableId: string): SettledInfo | undefined {
-    const record = store.getSettlement(payableId);
+    const buffer = await file.toBuffer();
+    try {
+      const outcome = await ingestAndPersist(db, buffer);
+      return outcome;
+    } catch (err) {
+      return reply.code(400).send({ error: `could not parse workbook: ${(err as Error).message}` });
+    }
+  });
+  async function settledInfo(payableId: string): Promise<SettledInfo | undefined> {
+    const record = await store.getSettlement(payableId);
     if (!record) return undefined;
     return {
       txHash: record.txHash,
       ledger: record.ledger,
       proofHash: record.proofHash,
       explorerUrl: explorerTxUrl(deployment, record.txHash),
+      network: deployment.network,
+      erpPostingStatus: record.erpPostingStatus,
     };
   }
 
@@ -59,15 +81,19 @@ export async function buildApp(options: BuildAppOptions = {}) {
     settlement: settlement.chain ? "enabled" : "disabled",
   }));
 
+  app.get("/policy", async () => loadPolicy());
+
   app.get("/payables", async () => {
     const { payables, results } = await evaluateLive(db, now());
     const byPayableId = new Map(results.map((r) => [r.payableId, r]));
 
-    return payables.map((payable) => {
-      const result = byPayableId.get(payable.payableId);
-      if (!result) throw new Error(`no kernel result for ${payable.payableId}`);
-      return toApiPayable(payable, result, settledInfo(payable.payableId));
-    });
+    return Promise.all(
+      payables.map(async (payable) => {
+        const result = byPayableId.get(payable.payableId);
+        if (!result) throw new Error(`no kernel result for ${payable.payableId}`);
+        return toApiPayable(payable, result, await settledInfo(payable.payableId));
+      }),
+    );
   });
 
   app.get<{ Params: { payableId: string } }>("/payables/:payableId/proof", async (request, reply) => {
@@ -103,7 +129,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
     if (!payable || !result) {
       return reply.code(404).send({ error: `no payable ${request.params.payableId}` });
     }
-    return toApiPayable(payable, result, settledInfo(payable.payableId));
+    return toApiPayable(payable, result, await settledInfo(payable.payableId));
   });
 
   /**
@@ -117,7 +143,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
    */
   app.post<{ Params: { payableId: string } }>("/payables/:payableId/settle", async (request, reply) => {
     const payableId = request.params.payableId;
-    const existing = settledInfo(payableId);
+    const existing = await settledInfo(payableId);
     if (existing) return { status: "ALREADY_SETTLED", payableId, settlement: existing };
 
     if (!settlement.chain) return reply.code(503).send({ error: CHAIN_DISABLED });
@@ -140,7 +166,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
       const { signed } = settlement.chain.issuer.sign(proof, deployment);
       const outcome = await settlement.chain.adapter.settle(signed, settlementContext(payable));
       if (outcome.status === "ALREADY_SETTLED") {
-        return { status: "ALREADY_SETTLED", payableId, settlement: settledInfo(payableId) };
+        return { status: "ALREADY_SETTLED", payableId, settlement: await settledInfo(payableId) };
       }
       return {
         status: "SETTLED",
@@ -170,7 +196,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
       const reason = request.body?.reason?.trim();
       if (!reason) return reply.code(400).send({ error: "reason is required" });
 
-      const proof = store.getProof(request.params.payableId);
+      const proof = await store.getProof(request.params.payableId);
       if (!proof) return reply.code(404).send({ error: `${request.params.payableId} was never registered by this backend` });
 
       const signature = settlement.chain.issuer.signRevocation(proof.payableId, proof.proofHash, reason, deployment);
@@ -178,7 +204,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
         const tx = await settlement.chain.gate.revokePayable(proof.payableIdHash, reason, [
           { issuerPublicKeyHex: settlement.chain.issuer.publicKeyHex, signature },
         ]);
-        store.setProofStatus(proof.payableIdHash, "REVOKED");
+        await store.setProofStatus(proof.payableIdHash, "REVOKED");
         return { status: "REVOKED", payableId: proof.payableId, reason, txHash: tx.txHash, explorerUrl: explorerTxUrl(deployment, tx.txHash) };
       } catch (err) {
         if (err instanceof GateError) return reply.code(409).send({ error: err.message, code: err.code });
@@ -188,7 +214,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   );
 
   app.get("/settlements", async () =>
-    store.listSettlements().map((s) => ({ ...s, explorerUrl: explorerTxUrl(deployment, s.txHash) })),
+    (await store.listSettlements()).map((s) => ({ ...s, explorerUrl: explorerTxUrl(deployment, s.txHash) })),
   );
 
   /**
@@ -198,13 +224,13 @@ export async function buildApp(options: BuildAppOptions = {}) {
    * next, so an auditor can walk from money back to the invoice.
    */
   app.get<{ Params: { payableId: string } }>("/settlements/:payableId", async (request, reply) => {
-    const record = store.getSettlement(request.params.payableId);
-    const proof = store.getProof(request.params.payableId);
+    const record = await store.getSettlement(request.params.payableId);
+    const proof = await store.getProof(request.params.payableId);
     if (!record && !proof) return reply.code(404).send({ error: `nothing on record for ${request.params.payableId}` });
     return {
       settlement: record ? { ...record, explorerUrl: explorerTxUrl(deployment, record.txHash) } : undefined,
       proof,
-      events: proof ? store.listChainEvents(proof.payableIdHash) : [],
+      events: proof ? await store.listChainEvents(proof.payableIdHash) : [],
     };
   });
 
@@ -228,7 +254,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
       const s = String(v);
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
-    const rows = store.listSettlements().map((s) =>
+    const rows = (await store.listSettlements()).map((s) =>
       [
         s.payableId,
         s.invoiceId,
@@ -264,7 +290,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
       asset: deployment.assetCode,
       committed: unitsToDecimal(committed),
       available: unitsToDecimal(available),
-      settledCount: store.listSettlements().length,
+      settledCount: (await store.listSettlements()).length,
     };
   });
 
@@ -272,6 +298,12 @@ export async function buildApp(options: BuildAppOptions = {}) {
   app.post("/agent/run", async (_request, reply) => {
     if (!settlement.chain) return reply.code(503).send({ error: CHAIN_DISABLED });
     return settlement.chain.agent.runOnce();
+  });
+
+  app.get<{ Params: { payableId: string } }>("/payables/:payableId/settlement", async (request, reply) => {
+    const record = await store.getSettlement(request.params.payableId);
+    if (!record) return reply.code(404).send({ error: `no settlement for ${request.params.payableId}` });
+    return { ...record, explorerUrl: explorerTxUrl(deployment, record.txHash) };
   });
 
   app.get("/vendors", async () => {
@@ -303,7 +335,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
         return reply.code(400).send({ error: `${address} is not a valid Stellar account id (G..., 56 characters)` });
       }
 
-      const wallet = registerWalletChange(db, request.params.vendorId, address, new Date());
+      const wallet = await registerWalletChange(db, request.params.vendorId, address, new Date());
       return wallet;
     },
   );
@@ -311,10 +343,37 @@ export async function buildApp(options: BuildAppOptions = {}) {
   /** HU-D2-15 step 2: a human confirms the wallet on file is really the vendor's. */
   app.post<{ Params: { vendorId: string } }>("/vendors/:vendorId/wallet/attest", async (request, reply) => {
     try {
-      return attestWallet(db, request.params.vendorId);
+      return await attestWallet(db, request.params.vendorId);
     } catch (err) {
       return reply.code(404).send({ error: (err as Error).message });
     }
+  });
+
+  /**
+   * §25 maestro, Scene 4: "Operations confirms receipt for INV-005. Pakta
+   * revalidates and pays." Payable-scoped (not PO-scoped) because that's
+   * what the Exceptions module shows the owner — resolves to the
+   * payable's PO under the hood.
+   */
+  app.post<{
+    Params: { payableId: string };
+    Body: { confirmedQty?: number; invoicedQty?: number; confirmedBy?: string };
+  }>("/payables/:payableId/receipt", async (request, reply) => {
+    const { payables } = await evaluateLive(db);
+    const payable = payables.find((p) => p.payableId === request.params.payableId);
+    if (!payable) return reply.code(404).send({ error: `no payable ${request.params.payableId}` });
+
+    const poId = payable.purchaseOrder?.poId;
+    if (!poId) return reply.code(400).send({ error: `${payable.payableId} has no purchase order to confirm receipt against` });
+
+    const { confirmedQty, invoicedQty, confirmedBy } = request.body ?? {};
+    const receipt = await confirmReceipt(
+      db,
+      poId,
+      { confirmedQty, invoicedQty, confirmedBy: confirmedBy?.trim() || "ops@pakta.demo" },
+      new Date(),
+    );
+    return receipt;
   });
 
   app.get("/summary", async () => {
@@ -332,13 +391,12 @@ export async function buildApp(options: BuildAppOptions = {}) {
     for (const p of payables) {
       const amount = Number(p.invoice.amount);
       totalRequested += amount;
-      if (store.getSettlement(p.payableId)) {
+      const result = byPayableId.get(p.payableId);
+
+      if (await store.getSettlement(p.payableId)) {
         totalSettled += amount;
         settledCount++;
-        continue;
-      }
-      const result = byPayableId.get(p.payableId);
-      if (result?.status === "READY") {
+      } else if (result?.status === "READY") {
         totalReady += amount;
         readyCount++;
       } else {

@@ -1,17 +1,17 @@
-import { PageHeader } from "@/components/PageHeader";
 import { IntakeFlow } from "@/components/IntakeFlow";
-import { getSummary } from "@/lib/api";
+import { PayablesBoard } from "@/components/PayablesBoard";
+import { getPayables, getVendors } from "@/lib/api";
 
-export default async function IntakePage() {
-  const summary = await getSummary();
+export default async function DashboardPage() {
+  const [payables, vendors] = await Promise.all([getPayables(), getVendors()]);
 
   return (
-    <div>
-      <PageHeader
-        title="Cargá tu evidencia"
-        description="Excel, PDF o email — Pakta lo normaliza todo al mismo modelo antes de tocar las reglas de negocio."
-      />
-      <IntakeFlow summary={summary} />
+    <div className="flex flex-col gap-10">
+      <IntakeFlow />
+
+      <div id="resultados">
+        <PayablesBoard initialPayables={payables} vendors={vendors} />
+      </div>
     </div>
   );
 }

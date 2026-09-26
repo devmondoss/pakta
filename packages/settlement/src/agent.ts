@@ -83,15 +83,18 @@ export class SettlementAgent {
     report.swept = await this.#sweep();
 
     const nowSeconds = Math.floor(this.#now().getTime() / 1000);
-    const candidates = (await this.#listReady())
-      .filter(({ proof }) => !this.#store.getSettlement(proof.payable_id))
-      .sort((a, b) => Date.parse(a.proof.expires_at) - Date.parse(b.proof.expires_at));
+    const ready = await this.#listReady();
+    const candidates = [] as typeof ready;
+    for (const candidate of ready) {
+      if (!(await this.#store.getSettlement(candidate.proof.payable_id))) candidates.push(candidate);
+    }
+    candidates.sort((a, b) => Date.parse(a.proof.expires_at) - Date.parse(b.proof.expires_at));
 
     let available = await this.#gate.getAvailable();
 
     for (const { proof, context } of candidates) {
       const amount = decimalToUnits(proof.amount);
-      const alreadyRegistered = this.#store.getProof(proof.payable_id)?.status === "REGISTERED";
+      const alreadyRegistered = (await this.#store.getProof(proof.payable_id))?.status === "REGISTERED";
 
       // A payable already registered is already committed, so it does not need
       // fresh headroom; a new one does, and the gate would refuse it anyway.
@@ -135,7 +138,7 @@ export class SettlementAgent {
    */
   async #sweep(): Promise<number> {
     const nowSeconds = Math.floor(this.#now().getTime() / 1000);
-    const lapsed = this.#store.listOpenRegistrations().filter((p) => p.expiry < nowSeconds);
+    const lapsed = (await this.#store.listOpenRegistrations()).filter((p) => p.expiry < nowSeconds);
     if (lapsed.length === 0) return 0;
 
     await this.#gate.expireBatch(lapsed.map((p) => p.payableIdHash));
@@ -143,10 +146,10 @@ export class SettlementAgent {
     for (const proof of lapsed) {
       const onChain = await this.#gate.getPayable(proof.payableIdHash);
       if (onChain?.status === "EXPIRED") {
-        this.#store.setProofStatus(proof.payableIdHash, "EXPIRED");
+        await this.#store.setProofStatus(proof.payableIdHash, "EXPIRED");
         expired += 1;
       } else if (onChain?.status === "SETTLED") {
-        this.#store.setProofStatus(proof.payableIdHash, "SETTLED");
+        await this.#store.setProofStatus(proof.payableIdHash, "SETTLED");
       }
     }
     return expired;

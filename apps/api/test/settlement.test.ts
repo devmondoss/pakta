@@ -1,14 +1,16 @@
 import { FakeGate, Issuer, SettlementAdapter, SettlementAgent } from "@pakta/settlement";
+import { resetDb } from "@pakta/db";
 import type { FastifyInstance } from "fastify";
 import { beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
+import { getDb } from "../src/db.js";
 import type { ApiPayable } from "../src/mapPayable.js";
 
 /**
  * The API end to end, with only the chain replaced by an in-memory gate that
  * enforces the real contract's rules (including the issuer's Ed25519
  * signature). Everything else is real: the workbook, the kernel, the proof
- * builder, the issuer, the adapter, SQLite.
+ * builder, the issuer, the adapter, and PostgreSQL's isolated test schema.
  */
 
 const NOW = new Date("2026-09-25T12:00:00Z");
@@ -18,6 +20,7 @@ const gate = new FakeGate(issuer.publicKeyHex);
 let app: FastifyInstance;
 
 beforeAll(async () => {
+  await resetDb(await getDb());
   app = await buildApp({
     logger: false,
     now: () => NOW,

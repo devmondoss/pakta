@@ -76,8 +76,8 @@ describe("a fresh proof", () => {
   it("records the settlement, and tells the kernel this invoice is paid", async () => {
     await adapter.settle(signed(), CONTEXT);
 
-    expect(store.getSettlement("PAY-INV-001")?.amount).toBe("5000.00");
-    expect(store.getProof("PAY-INV-001")?.status).toBe("SETTLED");
+    expect((await store.getSettlement("PAY-INV-001"))?.amount).toBe("5000.00");
+    expect((await store.getProof("PAY-INV-001"))?.status).toBe("SETTLED");
     // The kernel's PAYMENT_ALREADY_SETTLED rule reads this.
     expect(store.settledFingerprints.has("VEN-001|5000.00")).toBe(true);
   });
@@ -236,7 +236,7 @@ describe("reconciling a settlement the backend never recorded", () => {
     ]);
     const tx = await gate.settle(prepared.payableIdHash);
     // ...and the indexer stored the event, but could not attribute it.
-    store.recordChainEvent({
+    await store.recordChainEvent({
       id: "evt-1",
       type: "settlement_executed",
       ledger: tx.ledger,
@@ -244,12 +244,12 @@ describe("reconciling a settlement the backend never recorded", () => {
       payableIdHash: prepared.payableIdHash,
       payload: {},
     });
-    expect(store.getSettlement("PAY-INV-001")).toBeUndefined();
+    expect(await store.getSettlement("PAY-INV-001")).toBeUndefined();
 
     const outcome = await adapter.settle(proof, CONTEXT);
 
     expect(outcome.status).toBe("ALREADY_SETTLED");
-    expect(store.getSettlement("PAY-INV-001")).toMatchObject({ txHash: tx.txHash, ledger: tx.ledger });
+    expect(await store.getSettlement("PAY-INV-001")).toMatchObject({ txHash: tx.txHash, ledger: tx.ledger });
     if (outcome.status === "ALREADY_SETTLED") expect(outcome.settlement?.settlement.tx_hash).toBe(tx.txHash);
     expect(store.settledFingerprints.has("VEN-001|5000.00")).toBe(true);
     expect(gate.payments).toHaveLength(1);

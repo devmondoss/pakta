@@ -61,8 +61,8 @@ describe("EventIndexer", () => {
     store = new MemorySettlementStore();
   });
 
-  function knownProof(payableIdHash: string) {
-    store.upsertProof({
+  async function knownProof(payableIdHash: string) {
+    await store.upsertProof({
       payableId: "PAY-INV-001",
       payableIdHash,
       proofHash: "e".repeat(64),
@@ -87,7 +87,7 @@ describe("EventIndexer", () => {
   });
 
   it("records a settlement the adapter never saw — a call that landed but lost its response", async () => {
-    knownProof("1".repeat(64));
+    await knownProof("1".repeat(64));
     const indexer = new EventIndexer({
       source: new ListSource([{ events: [event({})], cursor: "c1", latestLedger: 1500 }]),
       store,
@@ -97,13 +97,13 @@ describe("EventIndexer", () => {
     const report = await indexer.poll();
 
     expect(report.settlementsRecorded).toEqual(["PAY-INV-001"]);
-    expect(store.getSettlement("PAY-INV-001")).toMatchObject({ txHash: "f".repeat(64), ledger: 1500, amount: "5000.00" });
-    expect(store.getProof("PAY-INV-001")?.status).toBe("SETTLED");
+    expect(await store.getSettlement("PAY-INV-001")).toMatchObject({ txHash: "f".repeat(64), ledger: 1500, amount: "5000.00" });
+    expect((await store.getProof("PAY-INV-001"))?.status).toBe("SETTLED");
     expect(store.settledFingerprints.has("VEN-001|5000.00")).toBe(true);
   });
 
   it("is harmless to replay: the same event twice records one settlement", async () => {
-    knownProof("1".repeat(64));
+    await knownProof("1".repeat(64));
     const page = { events: [event({})], cursor: "c1", latestLedger: 1500 };
     const indexer = new EventIndexer({ source: new ListSource([page, { ...page }]), store, deployment });
 
@@ -111,7 +111,7 @@ describe("EventIndexer", () => {
     const second = await indexer.poll();
 
     expect(second.recorded).toBe(0);
-    expect(store.listSettlements()).toHaveLength(1);
+    expect(await store.listSettlements()).toHaveLength(1);
   });
 
   it("resumes from its persisted cursor instead of re-reading history", async () => {
@@ -134,12 +134,12 @@ describe("EventIndexer", () => {
     });
     const report = await indexer.poll();
     expect(report.unknownSettlements).toEqual(["9".repeat(64)]);
-    expect(store.listSettlements()).toHaveLength(0);
+    expect(await store.listSettlements()).toHaveLength(0);
     expect(store.events.size).toBe(1);
   });
 
   it("tracks registration, revocation and expiry — but never walks a proof backwards", async () => {
-    knownProof("1".repeat(64));
+    await knownProof("1".repeat(64));
     const indexer = new EventIndexer({
       source: new ListSource([
         {
@@ -156,7 +156,7 @@ describe("EventIndexer", () => {
       deployment,
     });
     await indexer.poll();
-    expect(store.getProof("PAY-INV-001")?.status).toBe("SETTLED");
+    expect((await store.getProof("PAY-INV-001"))?.status).toBe("SETTLED");
   });
 });
 
@@ -236,7 +236,7 @@ describe("SettlementAgent", () => {
     await gate.registerPayable(prepared, [
       { issuerPublicKeyHex: issuer.publicKeyHex, signature: new Uint8Array(Buffer.from(signed.issuer_signature, "base64")) },
     ]);
-    store.upsertProof({
+    await store.upsertProof({
       payableId: past.proof.payable_id,
       payableIdHash: prepared.payableIdHash,
       proofHash: prepared.proofHash,
@@ -264,7 +264,7 @@ describe("SettlementAgent", () => {
 
     expect(report.swept).toBe(1);
     expect(gate.committed).toBe(0n);
-    expect(store.getProof("PAY-INV-OLD")?.status).toBe("EXPIRED");
+    expect((await store.getProof("PAY-INV-OLD"))?.status).toBe("EXPIRED");
   });
 
   it("keeps paying when the event source is down — the adapter reads the chain itself", async () => {
@@ -285,7 +285,7 @@ describe("EventIndexer pagination", () => {
     // Exactly what testnet returned: an empty first page with an advanced
     // cursor, the events on the second, then no further progress.
     const store = new MemorySettlementStore();
-    store.upsertProof({
+    await store.upsertProof({
       payableId: "PAY-INV-001",
       payableIdHash: "1".repeat(64),
       proofHash: "e".repeat(64),
@@ -313,7 +313,7 @@ describe("EventIndexer pagination", () => {
 
     expect(report.settlementsRecorded).toEqual(["PAY-INV-001"]);
     expect(source.requestedCursors).toEqual([undefined, "c1", "c2"]);
-    expect(store.getCursor(`gate:${deployment.contractId}`)?.cursor).toBe("c2");
+    expect((await store.getCursor(`gate:${deployment.contractId}`))?.cursor).toBe("c2");
   });
 
   it("stops at the page cap even if the source never settles down", async () => {

@@ -26,6 +26,8 @@ export type ApiPayable = {
     ledger: number;
     proofHash: string;
     explorerUrl: string;
+    network: string;
+    erpPostingStatus: string;
   };
   exception?: {
     reason: string;
@@ -36,7 +38,14 @@ export type ApiPayable = {
   };
 };
 
-export type SettledInfo = { txHash: string; ledger: number; proofHash: string; explorerUrl: string };
+export type SettledInfo = {
+  txHash: string;
+  ledger: number;
+  proofHash: string;
+  explorerUrl: string;
+  network: string;
+  erpPostingStatus: string;
+};
 
 export function toApiPayable(payable: CanonicalPayable, result: KernelResult, settled?: SettledInfo): ApiPayable {
   const base: ApiPayable = {

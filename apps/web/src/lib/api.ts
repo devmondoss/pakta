@@ -28,6 +28,8 @@ export type Payable = {
     ledger: number;
     proofHash: string;
     explorerUrl: string;
+    network: string;
+    erpPostingStatus: string;
   };
   exception?: {
     reason: ExceptionReasonCode;

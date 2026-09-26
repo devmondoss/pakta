@@ -1,4 +1,4 @@
-import { createSettlementStore, type Db, type SqliteSettlementStore } from "@pakta/db";
+import { createSettlementStore, type Db, type PostgresSettlementStore } from "@pakta/db";
 import { buildProofOfPayable } from "@pakta/proof-builder";
 import {
   EventIndexer,
@@ -37,14 +37,14 @@ export type ChainServices = {
 
 export type SettlementServices = {
   deployment: Deployment;
-  store: SqliteSettlementStore;
+  store: PostgresSettlementStore;
   /** Absent when the keys are not configured — the API still serves everything read-only. */
   chain?: ChainServices;
 };
 
 export type ChainFactory = (context: {
   deployment: Deployment;
-  store: SqliteSettlementStore;
+  store: PostgresSettlementStore;
   listReady: () => Promise<ReadyPayable[]>;
 }) => ChainServices | undefined;
 
