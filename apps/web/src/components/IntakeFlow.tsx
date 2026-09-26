@@ -132,11 +132,11 @@ export function IntakeFlow({
     <div>
       {state === "idle" && (
         <div className="intake-primary">
-          <p className="intake-primary-label">Empezá la demo</p>
+          <p className="intake-primary-label">Fuente de datos</p>
           <div className="relative flex justify-center">
             <button type="button" onClick={() => setShowVariants((v) => !v)} className="intake-primary-cta">
               <PlayCircle size={18} strokeWidth={2.2} />
-              Cargar dataset de prueba
+              Cargar dataset
             </button>
 
             {showVariants && (
@@ -192,7 +192,7 @@ export function IntakeFlow({
           <div className="intake-result-head">
             <p className="text-sm">
               <span className="text-ready">Listo.</span>{" "}
-              {result.variantLabel ? `Caso — ${result.variantLabel}` : "Dataset de prueba"} — {result.ingested}{" "}
+              {result.variantLabel ? `Caso — ${result.variantLabel}` : "Dataset"} — {result.ingested}{" "}
               payables ingestados de verdad, persistidos en la base.
             </p>
             <button onClick={reset} className="intake-reset shrink-0">

@@ -56,7 +56,7 @@ export function IntakeHistory() {
     <div className="intake-history">
       <p className="intake-history-heading">Actividad reciente{runs.length > 0 ? ` · ${runs.length}` : ""}</p>
       {runs.length === 0 ? (
-        <p className="intake-history-empty">Todavía no hay actividad — subí un archivo o probá un caso real arriba.</p>
+        <p className="intake-history-empty">Todavía no hay actividad — cargá un dataset arriba para arrancar.</p>
       ) : (
         <div className="intake-history-list">
           {runs.map(({ entry, kind }) => (
