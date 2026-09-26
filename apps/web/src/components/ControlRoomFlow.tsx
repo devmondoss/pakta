@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import type { ActivityEntry, Payable, Vendor } from "@/lib/api";
+import type { Payable, Vendor } from "@/lib/api";
 import { IntakeFlow } from "@/components/IntakeFlow";
+import { IntakeHistory } from "@/components/IntakeHistory";
 import { PayablesBoard } from "@/components/PayablesBoard";
 import { PipelineOverview } from "@/components/PipelineOverview";
 import { SummaryStrip } from "@/components/SummaryStrip";
@@ -48,11 +49,9 @@ function computeStage(
 export function ControlRoomFlow({
   initialPayables,
   vendors,
-  activity,
 }: {
   initialPayables: Payable[];
   vendors: Vendor[];
-  activity: ActivityEntry[];
 }) {
   const [phase, setPhase] = useState<IntakePhase>("idle");
   const [processingStage, setProcessingStage] = useState<0 | 1>(0);
@@ -69,18 +68,16 @@ export function ControlRoomFlow({
   return (
     <div className="flex flex-col gap-10">
       <PipelineOverview activeIndex={index} finished={finished} />
-      <SummaryStrip payables={payables} />
+      {hasActed && <SummaryStrip payables={payables} />}
       <div className="control-panel p-3 sm:p-4">
         <IntakeFlow onPhaseChange={handlePhaseChange} />
       </div>
-      <div id="resultados">
-        <PayablesBoard
-          initialPayables={initialPayables}
-          vendors={vendors}
-          activity={activity}
-          onPayablesChange={setPayables}
-        />
-      </div>
+      {!hasActed && <IntakeHistory />}
+      {hasActed && (
+        <div id="resultados">
+          <PayablesBoard initialPayables={initialPayables} vendors={vendors} onPayablesChange={setPayables} />
+        </div>
+      )}
     </div>
   );
 }

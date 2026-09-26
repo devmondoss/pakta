@@ -140,8 +140,9 @@ export async function ingestPdfAndPersist(
 export async function seedDemo(
   db: Db,
   variantIndex?: number,
+  opts: { withExtras?: boolean } = {},
 ): Promise<IngestOutcome & { variantLabel: string; invoices: ReturnType<typeof invoiceSummary> }> {
-  const variant = pickVariant(variantIndex);
+  const variant = pickVariant(variantIndex, opts);
   const workbookBuffer = await buildDemoWorkbookBuffer(variant);
   const outcome = await ingestAndPersist(db, workbookBuffer);
   await addKnownFingerprint(db, "VEN-002|3500.00", "INV-1994, recorded 11 days before the demo batch");
@@ -158,5 +159,5 @@ export async function seedDemo(
  */
 export async function seedIfEmpty(db: Db): Promise<void> {
   if ((await countPayables(db)) > 0) return;
-  await seedDemo(db, 0);
+  await seedDemo(db, 0, { withExtras: false });
 }

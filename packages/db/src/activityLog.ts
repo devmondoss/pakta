@@ -20,3 +20,20 @@ export async function listActivity(db: Db, limit = 10): Promise<ActivityEntry[]>
   )) as ActivityRow[];
   return rows.map((r) => ({ id: r.id, occurredAt: r.occurred_at, message: r.message }));
 }
+
+/**
+ * Just the intake events (demo data loaded, workbook uploaded, PDF read)
+ * — the "historial de pruebas" the Intake panel shows, kept separate from
+ * `listActivity` (which caps at the last 10 *of any kind* — wallet
+ * attestations or receipt confirmations would otherwise push a demo run
+ * out of that window within a few clicks).
+ */
+export async function listIntakeRuns(db: Db, limit = 50): Promise<ActivityEntry[]> {
+  const rows = (await db.query(
+    `SELECT id, occurred_at, message FROM ${db.schema}.${ACTIVITY_LOG_TABLE}
+     WHERE message LIKE $1 OR message LIKE $2 OR message LIKE $3
+     ORDER BY id DESC LIMIT $4`,
+    ["Datos de ejemplo cargados%", "Workbook subido%", "Factura PDF leída por IA%", limit],
+  )) as ActivityRow[];
+  return rows.map((r) => ({ id: r.id, occurredAt: r.occurred_at, message: r.message }));
+}
