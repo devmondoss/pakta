@@ -5,7 +5,7 @@ import type { Payable, Vendor } from "@/lib/api";
 import { IntakeFlow } from "@/components/IntakeFlow";
 import { IntakeHistory } from "@/components/IntakeHistory";
 import { PayablesBoard } from "@/components/PayablesBoard";
-import { PipelineOverview } from "@/components/PipelineOverview";
+import { PIPELINE_STAGES, PipelineOverview } from "@/components/PipelineOverview";
 import { StageIntro } from "@/components/StageIntro";
 import { ToastStack } from "@/components/ToastStack";
 
@@ -101,32 +101,45 @@ export function ControlRoomFlow({
   // que `index` salta directo ahí. Si `viewIndex` copiara ese salto tal
   // cual, Resolución (con las razones de cada bloqueo) ni se llegaría a
   // ver: aparecería y desaparecería en el mismo render. En vez de eso, la
-  // vista camina una etapa a la vez, mostrando un overlay que explica esa
-  // etapa hasta que el usuario lo cierra (o se cierra solo a los 5s) antes
-  // de seguir a la próxima.
+  // vista camina una etapa a la vez: entra, se queda `WORK_MS` mostrando
+  // el slide solo (como si esa etapa estuviera corriendo de verdad), y
+  // recién ahí aparece el overlay resumiendo qué pasó — nunca apenas se
+  // entra, o los resúmenes salen todos pegados uno atrás del otro.
+  const WORK_MS = 2200;
   const [viewIndex, setViewIndex] = useState(0);
   const [pinned, setPinned] = useState(false);
+  const [working, setWorking] = useState(false);
   const [introStage, setIntroStage] = useState<number | null>(null);
-  // Ref, no state: no necesitamos re-renderizar cuando el poll trae un
-  // array nuevo (misma info, otra referencia) — solo el valor más fresco
-  // de `payables` en el instante en que se entra a una etapa.
+  // Refs, no state: no necesitamos re-renderizar cuando el poll trae un
+  // array nuevo (misma info, otra referencia), ni cuando guardamos el id
+  // del timeout de "trabajo" en curso para poder cancelarlo.
   const payablesRef = useRef(payables);
   payablesRef.current = payables;
+  const workTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Entrar a una etapa explica qué hay ahí — sea porque el tour avanzó
-  // solo o porque el usuario clickeó un nodo a mano. Cualquiera de las dos
-  // formas de llegar dispara el mismo overlay.
+  // Entrar a una etapa la muestra de una, pero el resumen (`introStage`)
+  // aparece recién cuando termina el trabajo simulado — sea porque el
+  // tour avanzó solo o porque el usuario clickeó un nodo a mano.
   function goToStage(i: number) {
+    if (workTimeoutRef.current) clearTimeout(workTimeoutRef.current);
     setViewIndex(i);
-    setIntroStage(stageIntroCopy(i, payablesRef.current) ? i : null);
+    setIntroStage(null);
+    const hasIntro = stageIntroCopy(i, payablesRef.current) !== null;
+    setWorking(hasIntro);
+    if (hasIntro) {
+      workTimeoutRef.current = setTimeout(() => {
+        setWorking(false);
+        setIntroStage(i);
+      }, WORK_MS);
+    }
   }
 
   useEffect(() => {
-    if (pinned || introStage !== null || viewIndex === index) return;
+    if (pinned || working || introStage !== null || viewIndex === index) return;
     const next = viewIndex < index ? viewIndex + 1 : index;
     goToStage(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [index, pinned, viewIndex, introStage]);
+  }, [index, pinned, viewIndex, working, introStage]);
 
   function selectStage(i: number) {
     setPinned(true);
@@ -146,6 +159,12 @@ export function ControlRoomFlow({
       <ToastStack />
       {intro && <StageIntro title={intro.title} body={intro.body} onDismiss={() => setIntroStage(null)} />}
       <PipelineOverview activeIndex={index} viewIndex={viewIndex} finished={finished} onSelect={selectStage} />
+      {working && (
+        <p className="stage-working">
+          <span className="stage-working-dot" aria-hidden />
+          Procesando {PIPELINE_STAGES[viewIndex]?.toLowerCase()}…
+        </p>
+      )}
 
       <div className={viewIndex === 0 ? "flex flex-col gap-6" : "hidden"}>
         <div className="control-panel p-3 sm:p-4">

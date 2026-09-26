@@ -90,6 +90,8 @@ body { background: var(--background); color: var(--foreground); font-family: var
 .pipeline-strip-node-active .pipeline-strip-dot { background: var(--live); border-color: var(--live); animation: pulse-live 1.6s ease-in-out infinite; transform: scale(1.2); }
 .pipeline-strip-node-active .pipeline-strip-label { opacity: 1; color: var(--live); font-weight: 700; }
 .pipeline-strip-node-viewed .pipeline-strip-label { text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: .3rem; }
+.stage-working { display: flex; align-items: center; gap: .5rem; margin: 0; font-family: var(--font-geist-mono), monospace; font-size: .68rem; color: var(--muted); }
+.stage-working-dot { width: .45rem; height: .45rem; border-radius: 50%; background: var(--live); animation: pulse-live 1.2s ease-in-out infinite; }
 .app-loading { display: flex; flex-direction: column; gap: .8rem; }.app-loading-card { border: 1.5px solid #bdb6a8; border-radius: 1rem; background: #ebe5d8; }.app-error { display: flex; flex-direction: column; align-items: center; gap: .8rem; border: 1.6px solid #181713; border-radius: 1.3rem; background: #fbf8f0; box-shadow: var(--shadow); padding: 2.5rem; text-align: center; }
 
 /* Un slide por etapa — solo esto se muestra, nada de otras etapas compitiendo por atención. */
