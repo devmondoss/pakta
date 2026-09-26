@@ -10,7 +10,7 @@ type IllustrationName = "evidence" | "review" | "release";
 const cards: { title: string; copy: string; illustration: IllustrationName; tilt: number }[] = [
   { title: "Toda la evidencia,\nen un solo lugar", copy: "PO, invoice, receipt y proveedor unidos antes de decidir.", illustration: "evidence", tilt: -3 },
   { title: "Una política que\nsí se puede explicar", copy: "Las reglas determinísticas toman la decisión, no una corazonada.", illustration: "review", tilt: 2.1 },
-  { title: "Dinero que solo\nse mueve con proof", copy: "El settlement llega únicamente cuando la obligación es válida.", illustration: "release", tilt: -2.4 },
+  { title: "Un cierre que\ndeja rastro", copy: "El settlement y la conciliación quedan registrados al cerrar el ciclo.", illustration: "release", tilt: -2.4 },
 ];
 
 function LineIllustration({ name }: { name: IllustrationName }) {
@@ -56,15 +56,15 @@ export function LandingPage() {
             <Image src="/pakta-logo.png" alt="" width={24} height={24} priority aria-hidden="true" />
             pakta<span aria-hidden="true">••</span>
           </Link>
-          <div className="landing-nav-links"><a href="#como-funciona">Cómo funciona</a><a href="#control">El control</a><a href="#proof">Proof</a></div>
+          <div className="landing-nav-links"><a href="#como-funciona">Cómo funciona</a><a href="#control">El control</a><a href="#proof">Ejemplo</a></div>
           <Link className="landing-nav-cta" href="/control-room">Abrir demo <ArrowUpRight size={14} /></Link>
         </nav>
 
         <div className="landing-hero-content">
           <motion.p className="landing-eyebrow" initial={reduceMotion ? false : { opacity: 0, y: 8 }} animate={reduceMotion ? undefined : { opacity: 1, y: 0 }} transition={{ duration: 0.45 }}>CONTROL DE PAGOS · CON EVIDENCIA</motion.p>
           <motion.h1 initial={reduceMotion ? false : { opacity: 0, y: 22 }} animate={reduceMotion ? undefined : { opacity: 1, y: 0 }} transition={{ duration: 0.65, delay: 0.08 }}>Valida cada pago<br />antes de <span className="landing-selected-word">mover dinero</span>.</motion.h1>
-          <motion.p className="landing-hero-copy" initial={reduceMotion ? false : { opacity: 0, y: 12 }} animate={reduceMotion ? undefined : { opacity: 1, y: 0 }} transition={{ duration: 0.55, delay: 0.18 }}>Pakta convierte documentos dispersos en una obligación verificable. Tu equipo opera rápido; el dinero solo sale cuando la respuesta es clara.</motion.p>
-          <motion.div className="landing-action-row" initial={reduceMotion ? false : { opacity: 0, y: 12 }} animate={reduceMotion ? undefined : { opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.28 }}><span>Sube evidencia</span><i aria-hidden="true">→</i><span>Verifica política</span><i aria-hidden="true">→</i><Link href="/control-room">Ver demo <ArrowDownRight size={16} /></Link></motion.div>
+          <motion.p className="landing-hero-copy" initial={reduceMotion ? false : { opacity: 0, y: 12 }} animate={reduceMotion ? undefined : { opacity: 1, y: 0 }} transition={{ duration: 0.55, delay: 0.18 }}>Pakta convierte documentos dispersos en una obligación verificable y trazable. Tu equipo opera rápido; el dinero solo sale cuando la respuesta es clara.</motion.p>
+          <motion.div className="landing-action-row" initial={reduceMotion ? false : { opacity: 0, y: 12 }} animate={reduceMotion ? undefined : { opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.28 }}><span>Une evidencia</span><i aria-hidden="true">→</i><span>Aplica política</span><i aria-hidden="true">→</i><Link href="/control-room">Ver corrida real <ArrowDownRight size={16} /></Link></motion.div>
         </div>
 
         <motion.div className="landing-card-stage" initial={reduceMotion ? false : { opacity: 0, y: 42 }} whileInView={reduceMotion ? undefined : { opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.75, delay: 0.15 }}>
@@ -74,15 +74,15 @@ export function LandingPage() {
 
       <section className="landing-manifesto" id="control">
         <motion.div {...reveal} transition={{ duration: 0.55 }} viewport={{ once: true, amount: 0.3 }}><p>EL PROBLEMA</p><h2>Automatizar pagos sin contexto es solo automatizar el riesgo.</h2></motion.div>
-        <motion.p {...reveal} transition={{ duration: 0.55, delay: 0.1 }} viewport={{ once: true, amount: 0.3 }}>Pakta une la evidencia, las reglas y la autorización en un Proof-of-Payable que una persona y un sistema pueden revisar.</motion.p>
+        <motion.p {...reveal} transition={{ duration: 0.55, delay: 0.1 }} viewport={{ once: true, amount: 0.3 }}>Pakta une la evidencia, las reglas y la autorización en un Proof-of-Payable que una persona y un sistema pueden revisar antes de liquidar y conciliar.</motion.p>
       </section>
 
       <section className="landing-proof-section" id="proof">
-        <div><p className="landing-section-label">UN DOCUMENTO, UNA DECISIÓN</p><h2>La razón detrás de cada sí.</h2><p className="landing-body-copy">El pago no se aprueba por una predicción. Se libera cuando el importe, el proveedor y la evidencia cumplen la política.</p></div>
-        <motion.div className="landing-proof-paper" {...reveal} transition={{ duration: 0.6 }} viewport={{ once: true, amount: 0.25 }}><div><span>PROOF-OF-PAYABLE</span><strong>VALIDADO</strong></div><b>USD 5,000.00</b><dl><dt>Proveedor</dt><dd>Northline Supplies</dd><dt>Política</dt><dd>FIN-4.2 / passed</dd><dt>Destino</dt><dd>GA1C...P9FX</dd></dl><footer>listo para settlement <span>↗</span></footer></motion.div>
+        <div><p className="landing-section-label">EJEMPLO / UNA FACTURA</p><h2>Una decisión que<br />se puede seguir.</h2><p className="landing-body-copy">Nimbus Data Systems presenta una factura de USD 500. Pakta contrasta el PO, la recepción, la wallet y la política FIN-4.2; si todo coincide, genera el proof, liquida y concilia.</p><p className="landing-proof-note">Si una condición falla, no se libera dinero: Pakta muestra qué evidencia falta o no coincide.</p></div>
+        <motion.div className="landing-proof-paper" {...reveal} transition={{ duration: 0.6 }} viewport={{ once: true, amount: 0.25 }}><div><span>EJEMPLO ILUSTRATIVO</span><strong>TODO COINCIDE</strong></div><b>USD 500.00</b><dl><dt>Factura</dt><dd>INV-TEC-2401</dd><dt>Checks</dt><dd>PO · receipt · wallet</dd><dt>Política</dt><dd>FIN-4.2 · cumplida</dd></dl><footer>proof → Stellar testnet → ERP conciliado <span>↗</span></footer></motion.div>
       </section>
 
-      <section className="landing-process" id="como-funciona"><p className="landing-section-label">CÓMO FUNCIONA</p><h2>Tres pasos.<br />Sin cajas negras.</h2><div className="landing-process-grid">{[["01", "Conecta", "Recibimos PO, invoice, receipt y datos del proveedor."], ["02", "Comprueba", "Las reglas determinísticas verifican cada condición."], ["03", "Libera", "El proof correcto habilita el settlement auditable."]].map(([number, title, copy]) => <article key={number}><span>{number}</span><h3>{title}</h3><p>{copy}</p><i>↘</i></article>)}</div></section>
+      <section className="landing-process" id="como-funciona"><p className="landing-section-label">CÓMO FUNCIONA</p><h2>Cuatro pasos.<br />Sin cajas negras.</h2><div className="landing-process-grid">{[["01", "Conecta", "Recibimos PO, invoice, receipt y datos del proveedor."], ["02", "Comprueba", "Las reglas determinísticas verifican cada condición."], ["03", "Autoriza", "El proof deja clara la razón por la que se puede pagar."], ["04", "Liquida y cierra", "Stellar testnet confirma el settlement y el ERP queda conciliado."]].map(([number, title, copy]) => <article key={number}><span>{number}</span><h3>{title}</h3><p>{copy}</p><i>↘</i></article>)}</div></section>
       <section className="landing-closing"><p>PAKTA / CONTROL CON CRITERIO</p><h2>Menos fe.<br />Más <span>evidencia.</span></h2><Link href="/control-room">Entra a la demo <ArrowUpRight size={17} /></Link></section>
       <footer className="landing-footer"><span>PAKTA © 2026</span><span>Evidence before execution.</span><span>Hecho para pagos que deben poder explicarse.</span></footer>
     </main>
