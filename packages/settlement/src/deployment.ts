@@ -14,12 +14,16 @@ export type Deployment = {
   contractId: string;
   assetCode: string;
   assetContractId: string;
+  expectedIssuerPublicKeyHex?: string;
+  expectedExecutorAddress?: string;
 };
 
 type Manifest = {
   network: { name: string; passphrase: string; rpc: string };
   asset: { code: string; sacContractId: string };
   contracts: { payableGate: { contractId: string } };
+  issuers?: { pakta_issuer?: string };
+  accounts?: { executor?: string };
 };
 
 export function deploymentFromManifest(manifest: Manifest): Deployment {
@@ -30,6 +34,8 @@ export function deploymentFromManifest(manifest: Manifest): Deployment {
     contractId: manifest.contracts.payableGate.contractId,
     assetCode: manifest.asset.code,
     assetContractId: manifest.asset.sacContractId,
+    expectedIssuerPublicKeyHex: manifest.issuers?.pakta_issuer,
+    expectedExecutorAddress: manifest.accounts?.executor,
   };
 }
 

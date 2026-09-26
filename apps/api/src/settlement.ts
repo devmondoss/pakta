@@ -82,6 +82,12 @@ export const chainFromEnv: ChainFactory = ({ deployment, store, listReady }) => 
 
   const issuer = Issuer.fromEnv();
   const gate = SorobanGateClient.fromEnv(deployment);
+  if (deployment.expectedIssuerPublicKeyHex && issuer.publicKeyHex !== deployment.expectedIssuerPublicKeyHex) {
+    throw new Error("PAKTA_ISSUER_SECRET does not match the issuer configured in the deployment manifest");
+  }
+  if (deployment.expectedExecutorAddress && gate.executorAddress !== deployment.expectedExecutorAddress) {
+    throw new Error("PAKTA_EXECUTOR_SECRET does not match the executor configured in the deployment manifest");
+  }
   const adapter = new SettlementAdapter({ gate, store, deployment });
   const indexer = new EventIndexer({ source: new RpcEventSource(deployment), store, deployment });
   const agent = new SettlementAgent({ adapter, gate, store, issuer, deployment, indexer, listReady });
