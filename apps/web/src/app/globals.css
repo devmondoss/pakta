@@ -128,3 +128,16 @@ body { background: var(--background); color: var(--foreground); font-family: var
 @media (max-width: 480px) { .toast-stack { right: 1rem; left: 1rem; bottom: 1rem; width: auto; } }
 
 @media (max-width: 760px) { .control-main { width: calc(100% - 2rem); padding-top: 3.5rem; }.pipeline-strip-label { font-size: .5rem; } }
+
+/* Overlay centrado que explica cada etapa del pipeline — se cierra solo (5s) o con "Siguiente". */
+.stage-intro-backdrop { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(24, 23, 19, .45); padding: 1.5rem; animation: stage-intro-fade .2s ease-out; }
+.stage-intro-card { position: relative; width: min(420px, 100%); padding: 1.6rem 1.6rem 1.4rem; border: 1.8px solid #181713; border-radius: 1.3rem; background: #fbf8f0; box-shadow: 8px 8px 0 #181713; text-align: left; overflow: hidden; }
+.stage-intro-progress { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: #e5ded0; }
+.stage-intro-progress-bar { height: 100%; width: 100%; background: var(--live); transform-origin: left; animation-name: stage-intro-shrink; animation-timing-function: linear; animation-fill-mode: forwards; }
+.stage-intro-eyebrow { margin: .5rem 0 .5rem; font-family: var(--font-geist-mono), monospace; font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--live); }
+.stage-intro-body { margin: 0 0 1.3rem; font-size: .95rem; line-height: 1.5; color: var(--foreground); }
+.stage-intro-next { display: inline-flex; align-items: center; gap: .4rem; border: 1.6px solid #181713; border-radius: .7rem; padding: .55rem 1rem; background: var(--accent); color: #fff; font-size: .8rem; font-weight: 700; transition: transform .18s ease; }
+.stage-intro-next:hover { transform: translateY(-2px); }
+@keyframes stage-intro-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes stage-intro-shrink { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@media (prefers-reduced-motion: reduce) { .stage-intro-backdrop { animation: none; }.stage-intro-progress-bar { animation: none; transform: scaleX(0); } }

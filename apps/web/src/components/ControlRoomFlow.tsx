@@ -6,19 +6,13 @@ import { IntakeFlow } from "@/components/IntakeFlow";
 import { IntakeHistory } from "@/components/IntakeHistory";
 import { PayablesBoard } from "@/components/PayablesBoard";
 import { PipelineOverview } from "@/components/PipelineOverview";
+import { StageIntro } from "@/components/StageIntro";
 import { ToastStack } from "@/components/ToastStack";
-import { pushToast } from "@/lib/toast";
 
 type IntakePhase = "idle" | "processing" | "done" | "error";
 
-// Resolución trae varias tarjetas de excepción para leer — se queda más
-// tiempo en pantalla que un paso que es solo una lista o un botón. Más
-// lento a propósito: la demo necesita tiempo para que se lea el toast de
-// cada etapa antes de saltar a la siguiente.
-const TOUR_STEP_MS: Record<number, number> = { 1: 3200, 2: 6500, 3: 4200, 4: 4200, 5: 2600 };
-
-/** Qué avisar al entrar a cada etapa del tour — el toast que faltaba, porque `notifyTransitions` en PayablesBoard solo dispara ante un cambio real de estado, nunca en la primera pasada. */
-function stageToast(stage: number, payables: Payable[]): { title: string; body: string } | null {
+/** Qué explicar al entrar a cada etapa — un overlay centrado, no un toast de esquina: la demo necesita que esto se lea antes de seguir, no que pase desapercibido. */
+function stageIntroCopy(stage: number, payables: Payable[]): { title: string; body: string } | null {
   const count = (status: Payable["status"]) => payables.filter((p) => p.status === status).length;
   switch (stage) {
     case 1:
@@ -107,33 +101,32 @@ export function ControlRoomFlow({
   // que `index` salta directo ahí. Si `viewIndex` copiara ese salto tal
   // cual, Resolución (con las razones de cada bloqueo) ni se llegaría a
   // ver: aparecería y desaparecería en el mismo render. En vez de eso, la
-  // vista camina una etapa a la vez con una pausa, como si cada paso
-  // realmente tomara su tiempo.
+  // vista camina una etapa a la vez, mostrando un overlay que explica esa
+  // etapa hasta que el usuario lo cierra (o se cierra solo a los 5s) antes
+  // de seguir a la próxima.
   const [viewIndex, setViewIndex] = useState(0);
   const [pinned, setPinned] = useState(false);
-  // Ref, no state: el timer de abajo no debe reiniciarse cada vez que el
-  // poll trae un array nuevo (mismo contenido, otra referencia) — solo
-  // necesita el valor más fresco de `payables` en el instante en que
-  // dispara o en que se hace click, no en cada cambio.
+  const [introStage, setIntroStage] = useState<number | null>(null);
+  // Ref, no state: no necesitamos re-renderizar cuando el poll trae un
+  // array nuevo (misma info, otra referencia) — solo el valor más fresco
+  // de `payables` en el instante en que se entra a una etapa.
   const payablesRef = useRef(payables);
   payablesRef.current = payables;
 
-  // Entrar a una etapa avisa qué hay ahí — sea porque el tour avanzó solo
-  // o porque el usuario clickeó un nodo a mano. Cualquiera de las dos
-  // formas de llegar dispara el mismo toast.
+  // Entrar a una etapa explica qué hay ahí — sea porque el tour avanzó
+  // solo o porque el usuario clickeó un nodo a mano. Cualquiera de las dos
+  // formas de llegar dispara el mismo overlay.
   function goToStage(i: number) {
     setViewIndex(i);
-    const toast = stageToast(i, payablesRef.current);
-    if (toast) pushToast(toast.title, toast.body);
+    setIntroStage(stageIntroCopy(i, payablesRef.current) ? i : null);
   }
 
   useEffect(() => {
-    if (pinned || viewIndex === index) return;
+    if (pinned || introStage !== null || viewIndex === index) return;
     const next = viewIndex < index ? viewIndex + 1 : index;
-    const id = setTimeout(() => goToStage(next), TOUR_STEP_MS[next] ?? 1400);
-    return () => clearTimeout(id);
+    goToStage(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [index, pinned, viewIndex]);
+  }, [index, pinned, viewIndex, introStage]);
 
   function selectStage(i: number) {
     setPinned(true);
@@ -146,9 +139,12 @@ export function ControlRoomFlow({
     if (stage !== undefined) setProcessingStage(stage);
   }
 
+  const intro = introStage !== null ? stageIntroCopy(introStage, payablesRef.current) : null;
+
   return (
     <div className="flex flex-col gap-10">
       <ToastStack />
+      {intro && <StageIntro title={intro.title} body={intro.body} onDismiss={() => setIntroStage(null)} />}
       <PipelineOverview activeIndex={index} viewIndex={viewIndex} finished={finished} onSelect={selectStage} />
 
       <div className={viewIndex === 0 ? "flex flex-col gap-6" : "hidden"}>
