@@ -179,7 +179,13 @@ export function ControlRoomFlow({
 
       {hasActed && (
         <div id="resultados" className={viewIndex === 0 ? "hidden" : ""}>
-          <PayablesBoard initialPayables={initialPayables} vendors={vendors} stage={viewIndex} onPayablesChange={setPayables} />
+          <PayablesBoard
+            initialPayables={initialPayables}
+            vendors={vendors}
+            stage={viewIndex}
+            onPayablesChange={setPayables}
+            onProgress={() => setPinned(false)}
+          />
         </div>
       )}
     </div>

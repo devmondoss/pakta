@@ -10,9 +10,16 @@ import { blockedNarrative, reasonLabel } from "@/lib/reasoning";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
-/** Avisa solo las transiciones que de verdad mueven la aguja del pipeline — nunca en la carga inicial (`prev` vacío no cuenta como transición). */
-function notifyTransitions(prev: Payable[], next: Payable[]) {
+/**
+ * Avisa solo las transiciones que de verdad mueven la aguja del pipeline —
+ * nunca en la carga inicial (`prev` vacío no cuenta como transición).
+ * Devuelve si hubo al menos una transición real, para que quien llama
+ * pueda reaccionar (el tour se "despierta" y sigue el progreso de nuevo,
+ * en vez de quedarse mirando una lista que se vació sin explicación).
+ */
+function notifyTransitions(prev: Payable[], next: Payable[]): boolean {
   const prevById = new Map(prev.map((p) => [p.payableId, p]));
+  let changed = false;
   for (const p of next) {
     const before = prevById.get(p.payableId);
     if (!before) continue;
@@ -20,14 +27,18 @@ function notifyTransitions(prev: Payable[], next: Payable[]) {
     if (before.status === "BLOCKED" && p.status !== "BLOCKED") {
       const cause = before.exception ? ` — se resolvió: ${reasonLabel(before.exception.reason)}.` : ".";
       pushToast("Excepción resuelta", `${who} salió de Resolución${cause}`);
+      changed = true;
     }
     if (before.status !== "SETTLED" && p.status === "SETTLED") {
       pushToast("Settlement confirmado", `${who} se liquidó en Stellar por USD ${p.amount}.`);
+      changed = true;
     }
     if (before.settlement?.erpPostingStatus === "PENDING" && p.settlement?.erpPostingStatus === "RECONCILED") {
       pushToast("Reconciliación confirmada", `${who} quedó reconciliado con el ERP — ciclo cerrado.`);
+      changed = true;
     }
   }
+  return changed;
 }
 
 /** Un slide por etapa — cada una filtra a SOLO los payables que le corresponden, con el foco de tarjeta que le sirve a esa etapa nada más. */
@@ -46,11 +57,14 @@ export function PayablesBoard({
   vendors,
   stage,
   onPayablesChange,
+  onProgress,
 }: {
   initialPayables: Payable[];
   vendors: Vendor[];
   stage: number;
   onPayablesChange?: (payables: Payable[]) => void;
+  /** Se llama cuando una acción (propia o de otra pestaña) de verdad movió algo — quien escucha usa esto para volver a seguir el progreso real. */
+  onProgress?: () => void;
 }) {
   const [payables, setPayables] = useState(initialPayables);
   const [settlementEnabled, setSettlementEnabled] = useState(false);
@@ -62,8 +76,9 @@ export function PayablesBoard({
   // props; without this the board kept showing stale state until the
   // next 4 s poll, so a click looked like it did nothing.
   useEffect(() => {
-    notifyTransitions(payablesRef.current, initialPayables);
+    if (notifyTransitions(payablesRef.current, initialPayables)) onProgress?.();
     setPayables(initialPayables);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialPayables]);
   // El flujograma global vive fuera de este componente — le avisamos cada
   // vez que cambia la lista (carga inicial y cada poll) en vez de que lea
@@ -105,7 +120,7 @@ export function PayablesBoard({
         const res = await fetch(`${API_URL}/payables`, { cache: "no-store" });
         if (active && res.ok) {
           const next: Payable[] = await res.json();
-          notifyTransitions(payablesRef.current, next);
+          if (notifyTransitions(payablesRef.current, next)) onProgress?.();
           setPayables(next);
         }
       } catch {
@@ -116,6 +131,7 @@ export function PayablesBoard({
       active = false;
       clearInterval(id);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (stage === 1) {
