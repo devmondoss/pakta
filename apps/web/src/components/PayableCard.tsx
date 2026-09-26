@@ -10,7 +10,7 @@ import { SettleButton } from "@/components/SettleButton";
 import { ReconcileButton } from "@/components/SettlementActions";
 import { StatusBadge, SeverityBadge } from "@/components/StatusBadge";
 import { WalletActions } from "@/components/WalletActions";
-import { explainReady, reasoningTrace, requiredActionLabel } from "@/lib/reasoning";
+import { blockedNarrative, explainReady, reasoningTrace, requiredActionLabel } from "@/lib/reasoning";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 const WALLET_REASONS = new Set(["VENDOR_WALLET_CHANGED", "UNATTESTED_WALLET"]);
@@ -158,7 +158,7 @@ export function PayableCard({
           {exception && showExceptionActions ? (
             <div className="flex flex-col gap-3">
               <div className="flex items-start justify-between gap-3">
-                <p className="text-sm text-foreground/90">{exception.message}</p>
+                <p className="text-sm text-foreground/90">{blockedNarrative(payable)}</p>
                 <SeverityBadge severity={exception.severity} />
               </div>
               <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-muted">

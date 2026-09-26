@@ -6,7 +6,7 @@ import { OnChainPanel } from "@/components/OnChainPanel";
 import { PayableCard, type PayableCardFocus } from "@/components/PayableCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { pushToast } from "@/lib/toast";
-import { reasonLabel } from "@/lib/reasoning";
+import { blockedNarrative, reasonLabel } from "@/lib/reasoning";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -136,7 +136,7 @@ export function PayablesBoard({
                   <StatusBadge status={p.status} />
                 </div>
                 <p className="verification-reason">
-                  {p.exception ? `${reasonLabel(p.exception.reason)} — responsable: ${p.exception.ownerRole}` : "Factura, PO y receipt coinciden — proveedor y wallet verificados."}
+                  {p.exception ? blockedNarrative(p) : "Factura, PO y receipt coinciden — proveedor y wallet verificados."}
                 </p>
               </div>
             ))}
@@ -150,6 +150,11 @@ export function PayablesBoard({
   if (!config) return null;
 
   const items = payables.filter((p) => p.status === config.status);
+  // Solo en Proof-of-Payable: además de las que SÍ tienen proof, mostrar
+  // caso por caso por qué las bloqueadas todavía no lo tienen — el
+  // contraste completa la etapa en vez de dejarla solo con el lado
+  // positivo.
+  const blocked = stage === 3 ? payables.filter((p) => p.status === "BLOCKED") : [];
 
   return (
     <div className="pipeline-slide">
@@ -171,6 +176,25 @@ export function PayablesBoard({
               collapsible={false}
             />
           ))}
+        </div>
+      )}
+      {blocked.length > 0 && (
+        <div className="no-proof-section">
+          <p className="no-proof-heading">Todavía sin proof · {blocked.length}</p>
+          <div className="verification-list">
+            {blocked.map((p) => (
+              <div key={p.payableId} className="verification-row">
+                <div className="verification-row-top">
+                  <span className="verification-vendor truncate">{p.vendorName}</span>
+                  <span className="verification-id truncate">
+                    {p.invoiceId} · USD {p.amount}
+                  </span>
+                  <StatusBadge status={p.status} />
+                </div>
+                <p className="verification-reason">{blockedNarrative(p)}</p>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

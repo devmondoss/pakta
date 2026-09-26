@@ -44,6 +44,45 @@ export function requiredActionLabel(action: string): string {
   return REQUIRED_ACTION_LABELS[action] ?? action;
 }
 
+/**
+ * Un párrafo por caso, no una etiqueta genérica — cada tipo de excepción
+ * arranca con un "Encontramos que..." distinto, usando los datos reales
+ * de ESTE payable (monto, PO, proveedor), y cierra con el mensaje exacto
+ * que ya calculó el kernel (que trae los números precisos: montos,
+ * porcentajes de tolerancia, IDs) más quién tiene que resolverlo y cómo.
+ * Vale para cualquier dataset porque no hay nada hardcodeado por vendor —
+ * todo sale de `payable`/`exception`.
+ */
+const BLOCKED_OPENERS: Record<string, (p: Payable) => string> = {
+  DUPLICATE_INVOICE: (p) =>
+    `Encontramos que la factura ${p.invoiceId} de ${p.vendorName} (USD ${p.amount}) coincide con otra factura de ese mismo proveedor y ese mismo monto que el sistema ya tenía registrada.`,
+  PO_AMOUNT_MISMATCH: (p) =>
+    `Encontramos que la factura ${p.invoiceId} pide más plata de la que autoriza la orden de compra ${p.poId}, incluso contando el margen de tolerancia que permite la política.`,
+  MISSING_RECEIPT: (p) =>
+    `Encontramos que la factura ${p.invoiceId}, vinculada a la PO ${p.poId}, no tiene ningún receipt de recepción cargado — no hay constancia de que lo facturado haya llegado.`,
+  PARTIAL_RECEIPT: (p) =>
+    `Encontramos que la factura ${p.invoiceId} tiene un receipt registrado contra la PO ${p.poId}, pero cubre solo una parte de lo facturado.`,
+  VENDOR_WALLET_CHANGED: (p) =>
+    `Encontramos que la wallet de destino de la factura ${p.invoiceId} no coincide con la wallet atestada de ${p.vendorName} — cambió sin que nadie la revalidara.`,
+  UNATTESTED_WALLET: (p) =>
+    `Encontramos que la wallet de ${p.vendorName} nunca fue atestada por Vendor Master, y la factura ${p.invoiceId} ya la está usando como destino del pago.`,
+  BUDGET_EXCEEDED: (p) => `Encontramos que la factura ${p.invoiceId} (USD ${p.amount}) supera el presupuesto disponible en su centro de costo.`,
+  APPROVAL_MISSING: (p) => `Encontramos que la factura ${p.invoiceId} todavía no junta las firmas de aprobación que exige la política para un monto de USD ${p.amount}.`,
+  PROOF_EXPIRED: (p) => `Encontramos que el proof-of-payable que habilitaba la factura ${p.invoiceId} ya venció.`,
+  PAYMENT_ALREADY_SETTLED: (p) => `Encontramos que ya existe un settlement registrado para la factura ${p.invoiceId} — liquidarla de nuevo sería un pago duplicado.`,
+  ERP_POSTING_FAILED: (p) => `Encontramos que el posteo al ERP de la factura ${p.invoiceId} falló después de liquidada en Stellar.`,
+};
+
+export function blockedNarrative(payable: Payable): string {
+  const ex = payable.exception;
+  if (!ex) return "";
+  const opener = (BLOCKED_OPENERS[ex.reason] ?? (() => `Encontramos un problema con la factura ${payable.invoiceId}.`))(payable);
+  // El detalle exacto (montos, porcentaje de tolerancia, IDs) ya lo calculó
+  // el kernel — se agrega tal cual, no se reformula. Owner/acción requerida
+  // van en su propio bloque más abajo, no hace falta repetirlos acá.
+  return `${opener} ${ex.message}`;
+}
+
 /** Checklist en lenguaje llano de por qué un payable READY quedó habilitado — derivado del proof, no evaluado de nuevo. */
 export function explainReady(proof: ProofOfPayable): { label: string; detail: string }[] {
   return [
