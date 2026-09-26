@@ -100,16 +100,24 @@ function buildExtraInvoice(legalName: string, seq: number): ExtraInvoice {
 
 /**
  * `index` viene de la elección explícita del usuario en el picker; sin
- * él, se sortea (también al arrancar el server). El número de invoices
- * extra (0-5) y cuáles vendors del pool les tocan se resuelven acá, una
- * sola vez por corrida, para que el workbook que se ingesta y el resumen
- * que ve la UI muestren exactamente lo mismo.
+ * él, se sortea. El número de invoices extra (0-5) y cuáles vendors del
+ * pool les tocan se resuelven acá, una sola vez por corrida, para que el
+ * workbook que se ingesta y el resumen que ve la UI muestren exactamente
+ * lo mismo.
+ *
+ * `withExtras: false` desactiva esa variedad — la usa únicamente
+ * `seedIfEmpty` al arrancar el server, donde el batch tiene que ser
+ * reproducible (CI y los tests de `GET /payables` asumen el canónico
+ * exacto de 5 invoices: 1 READY + 4 BLOCKED). Cualquier corrida disparada
+ * desde el picker de la UI sí quiere la variedad, así que ahí se deja el
+ * default.
  */
-export function pickVariant(index?: number): ResolvedDemoVariant {
+export function pickVariant(index?: number, opts: { withExtras?: boolean } = {}): ResolvedDemoVariant {
+  const { withExtras = true } = opts;
   const variant = index !== undefined ? DEMO_VARIANTS[index] : DEMO_VARIANTS[Math.floor(Math.random() * DEMO_VARIANTS.length)];
   if (!variant) throw new Error(`no demo variant at index ${index}`);
 
-  const extraCount = Math.floor(Math.random() * (variant.extraVendorPool.length + 1));
+  const extraCount = withExtras ? Math.floor(Math.random() * (variant.extraVendorPool.length + 1)) : 0;
   const extraInvoices = shuffledSample(variant.extraVendorPool, extraCount).map((name, i) => buildExtraInvoice(name, i + 1));
 
   return { ...variant, extraInvoices };

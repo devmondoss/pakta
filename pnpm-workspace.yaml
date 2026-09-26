@@ -1,7 +1,13 @@
 packages:
   - "packages/*"
   - "apps/*"
+# esbuild's postinstall is deliberately disabled. On Windows, pnpm 12 re-imports
+# a package whose build has run, renaming its staging directory over the existing
+# one — which Windows refuses ("Access is denied", os error 5). The result was
+# that every install after the first one failed and left esbuild half-deleted.
+# esbuild does not need the script: tsx and vite use its JavaScript API, which
+# resolves the native binary from the @esbuild/<platform> optional dependency.
 allowBuilds:
-  esbuild: true
+  esbuild: false
   sharp: false
   unrs-resolver: false

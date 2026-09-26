@@ -590,6 +590,4 @@ Lo que falta antes de delegar acciones a agentes es otra capa de control: identi
 
 ## 11. Próximo paso
 
-El contrato `contracts/payable-contract` ya corre como vault prefondeado en Stellar testnet: registra proofs firmados, evita replay, permite revocación y ejecuta `settle(payable_id)` sin parámetros de destinatario ni monto. El proveedor de extracción actual es NVIDIA NIM y el dashboard ya consume la API real.
-
-El siguiente hito es cerrar la integración entre el proof emitido por la API y el settlement on-chain: un adapter que valide el deployment y la vigencia, reporte el resultado a `POST /payables/:id/settlement` y un indexer que reconcilie eventos de Stellar de forma persistente.
+El PayableGate v4 está desplegado e inicializado en Stellar testnet como vault con límites por payable y ventana (`CBTQDZBJYL2JFQAT64OZYFK4PFOA3EG7CMVZ44FCBSAPDE5EXMTACS6S`). `deployments/testnet.json` registra el contrato, el hash WASM y las transacciones de verificación. El backend conecta el proof firmado, el Settlement Adapter, el indexer y el agent; la API persiste su estado en PostgreSQL. El siguiente paso operativo es configurar las claves del issuer y executor y verificar el flujo completo con la base de datos y la red de testnet.

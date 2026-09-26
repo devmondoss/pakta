@@ -22,18 +22,21 @@ export type Payable = {
   amount: string;
   dueDate: string;
   status: PayableStatus;
+  /** Present once the payable has actually been paid on Stellar. */
+  settlement?: {
+    txHash: string;
+    ledger: number;
+    proofHash: string;
+    explorerUrl: string;
+    network: string;
+    erpPostingStatus: string;
+  };
   exception?: {
     reason: ExceptionReasonCode;
     message: string;
     severity: ExceptionSeverity;
     ownerRole: OwnerRole;
     requiredAction: string;
-  };
-  settlement?: {
-    txHash: string;
-    ledger: number;
-    network: string;
-    erpPostingStatus: string;
   };
 };
 
@@ -63,6 +66,8 @@ export type ProofOfPayable = {
   payable_id: string;
   invoice_hash: string;
   po_hash: string;
+  /** v1.1: the proof commits to receipts too, so it covers the whole three-way match. */
+  receipt_hash: string;
   vendor_id: string;
   vendor_wallet: string;
   wallet_attestation_version: number;

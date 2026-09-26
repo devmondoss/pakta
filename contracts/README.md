@@ -5,7 +5,7 @@ compilado y desplegado con Stellar CLI 28.0.0.
 
 ```powershell
 cd contracts
-cargo test --workspace     # 79 tests
+cargo test --workspace     # 106 tests
 cargo clippy --all-targets # limpio
 stellar contract build
 ```
@@ -31,8 +31,12 @@ firma, así que sustituir cualquier campo invalida el proof.
 | `register_payable` | ninguna — la autoridad está en las firmas | Registra una obligación como `Ready` si k-de-n issuers autorizados firmaron su digest |
 | `settle` | `executor` | Paga. Único parámetro: `payable_id` |
 | `expire` | ninguna | Cierra un payable vencido. Permissionless a propósito |
-| `revoke_payable` | **firma del issuer** | Invalida un payable antes de pagarse y libera lo comprometido. Solo puede *frenar* un pago, nunca redirigirlo |
-| `attest_lifecycle` | admin | Emite un evento de ciclo de vida. No cambia estado |
+| `revoke_payable` | **firma del issuer** | Invalida un payable antes de pagarse y libera lo comprometido. La razón va firmada (revocación V2). Solo puede *frenar* un pago, nunca redirigirlo |
+| `attest_lifecycle` | **firma del issuer** | Emite un testimonio de excepción (bloqueada / resuelta / reconciliada). Funciona para payables BLOCKED nunca registrados. No cambia estado |
+| `expire_batch` | ninguna | Barre varios vencidos en una transacción; salta los no expirables en vez de fallar |
+| `upgrade` | admin | Reemplaza el código conservando dirección y estado. Desde v4 el contract id es estable |
+| `set_admin` | admin actual **y** nuevo | Evita entregar el gate a una dirección que nadie controla |
+| `set_treasury` | admin **y** treasury actual | Sin esto el admin solo podría apuntar el treasury a sí mismo y retirar |
 | `withdraw` | admin | Devuelve float no comprometido al treasury fijado en `initialize` |
 | `get_committed` · `get_available` | — | Cuánto está prometido y cuánto puede moverse |
 | `set_paused` · `set_limits` · `set_proof_issuers` · `set_executor` | admin | Gobernanza |
@@ -92,6 +96,26 @@ o un vendor interesado en que el vault siga solvente pueden hacer la limpieza.
 
 El precio, dicho claro: **`available` solo es exacto una vez que los vencidos se han
 expirado de verdad**. Barrerlos es una tarea operativa, no algo que la cadena haga sola.
+
+## Techo de ventana del proof
+
+`register_payable` rechaza (`ProofWindowTooLong`) cualquier expiry a más de 7 días. La
+retención anti-replay se dimensionó contra ese techo; validarlo on-chain convierte la
+suposición sobre lo que firman los issuers en garantía. Los proofs de Dev 2 son de 48 h.
+
+## Actualizar el contrato sin redesplegar
+
+Desde v4, un cambio de código es un `upgrade`, no un deploy nuevo: se conservan el
+contract id, los payables, lo comprometido y la configuración.
+
+```bash
+pnpm contract:build
+HASH=$(stellar contract upload --wasm contracts/target/wasm32v1-none/release/payable_contract.wasm   --source deployer --network testnet)
+stellar contract invoke --id <GATE> --source pakta_admin --network testnet --send=yes   -- upgrade --new_wasm_hash "$HASH"
+```
+
+La llave de admin puede instalar código arbitrario: es la más poderosa del sistema y
+debe vivir con la del treasury, nunca en un servidor de aplicación.
 
 ## Caps de gasto
 
@@ -156,19 +180,32 @@ El seed del issuer se pasa por variable de entorno y nunca se escribe en el repo
 | | |
 |---|---|
 | **Red** | Stellar Testnet |
-| **PayableGate** | `CDKC6UYM7JFZOIR3DSSHZWSNFB4NTYQ3X3AVJJ5MIU3UH6H4NBQON5GB` (v3) |
-| **Wasm hash** | `28314459f6e83e34bf9cc5128d31b76d4a0a863f0ee17b1084a2ddc1c6d679eb` |
+| **PayableGate** | `CBTQDZBJYL2JFQAT64OZYFK4PFOA3EG7CMVZ44FCBSAPDE5EXMTACS6S` (v4, id estable) |
+| **Wasm hash** | `c598ec442ca216581a71b61f3e89eb02644613280e3f5aa24d65b471e92f0948` |
 | **USDC SAC** | `CAMYM3CR6YM6Y3PUI7NMBJJ3SHWUKDFPRC4C722OOXZG3ZUUFW3ROF5P` |
-| **Initialize tx** | [`1a57e1f2…92cfbf`](https://stellar.expert/explorer/testnet/tx/1a57e1f27423d488f2e8d710e680c99cdff0f86a4d7bd471cff6631a5792cfbf) |
-| **Estado** | Inicializado como vault con caps, fondeado con 100 000 USDC |
+| **Initialize tx** | [`e895036e…7c1408`](https://stellar.expert/explorer/testnet/tx/e895036e5657e3c8951c67cb894f7e6e6b037e93ca44de63c034284cad7c1408) |
+| **Upgrade tx** | [`67867c2f…531220`](https://stellar.expert/explorer/testnet/tx/67867c2f3b7f425cc3b614d0ab6569b027890e22d313108581f7a0885b531220) — ejercitado on-chain, estado preservado |
+| **Estado** | Inicializado como vault con caps; consulta `get_available` y `get_committed` para el saldo actual |
 
-La decisión de custodia ya está tomada para el demo: el **v3** está inicializado
-como vault y fondeado. Para consultar su configuración, usa el ID vigente del
-manifiesto:
+Verificación del 25-09-2026: `contract_version` devuelve `4`, `get_config`
+coincide con el manifiesto, `get_committed` devuelve `0` y `get_available`
+devuelve `610000000000` unidades del token demo (61 000 USDC). Estos saldos
+pueden cambiar. La compilación local de este checkout produjo el hash WASM
+`3fadb82d208307ef52412056f86d147bbf84e26c7aa19b7c6431ebbfdd1ab791`,
+distinto del hash desplegado. El contrato vigente sigue siendo el v4 del
+manifiesto; una actualización requiere revisar esa diferencia y la firma del
+admin, no solo reemplazar el hash en el JSON.
+
+El gate v3 (`CDKC6UYM…`) se retiró recuperando todo su float (89 000 USDC) con su propio
+`withdraw()` antes de fondear v4: no quedó nada atrapado.
+
+La decisión de custodia del demo es el vault v4. Para consultar su configuración
+sin enviar una transacción, usa el ID vigente del manifiesto:
 
 ```powershell
-stellar contract invoke --id CDKC6UYM7JFZOIR3DSSHZWSNFB4NTYQ3X3AVJJ5MIU3UH6H4NBQON5GB `
-  --source deployer --network testnet -- get_config
+stellar contract invoke --id CBTQDZBJYL2JFQAT64OZYFK4PFOA3EG7CMVZ44FCBSAPDE5EXMTACS6S `
+  --source-account GCHMGWSGJS4CNBLWF2SBQVUGAF674RWCT5DFK5QENPVL6UCLAXQT2MVL `
+  --network testnet --send no -- get_config
 ```
 
 `CCF2BKQMKRHOJWUAZPKD72PLWVKHDED6TBOOF7ZJYUXH4OZAOCDLBGON` es el v2

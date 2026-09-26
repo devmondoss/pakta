@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@pakta/canonical-model": "workspace:*",
+    "@pakta/proof-hash": "workspace:*",
     "@pakta/rules-kernel": "workspace:*"
   },
   "devDependencies": {

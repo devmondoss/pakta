@@ -186,4 +186,3 @@ El pipeline y el modelo de exceptions de Pakta no son una invención de hackatho
 - ¿El primer rediseño debería asumir Escenario A (más realista para el corporativo del colega) o seguir con B (lo que ya está construido y demostrado)?
 - ¿Vendors & Payment Details necesita soportar los dos tipos de destino a la vez (empresa híbrida: unos proveedores en banca, otros en USDC) o alcanza con uno solo por ahora?
 - ¿Quién diseña el "Marcar como pagado" manual del Escenario A — cuenta como una historia nueva de Dev 2 (no está en ningún sprint actual)?
-

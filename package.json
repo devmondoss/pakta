@@ -7,15 +7,16 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "vitest run",
+    "test": "vitest run --project ai-extraction --project canonical-model --project exception-service --project ingestion --project proof-builder --project proof-hash --project rules-kernel --project settlement --project stellar-sdk-wrapper",
+    "test:integration": "node scripts/test-integration.mjs",
     "test:watch": "vitest",
     "typecheck": "node scripts/typecheck.mjs",
     "build:fixture": "tsx fixtures/demo-workbook/build-fixture.ts",
+    "build:pdf-fixtures": "tsx fixtures/demo-invoices/build-fixtures.ts",
     "contract:test": "cargo test --manifest-path contracts/Cargo.toml --workspace",
     "contract:build": "stellar contract build --manifest-path contracts/payable-contract/Cargo.toml",
     "contract:fmt": "cargo fmt --manifest-path contracts/Cargo.toml --all -- --check",
-    "testnet:settle": "tsx scripts/testnet-settle.ts",
-    "build:pdf-fixtures": "tsx fixtures/demo-invoices/build-fixtures.ts"
+    "testnet:settle": "tsx scripts/testnet-settle.ts"
   },
   "devDependencies": {
     "typescript": "7.0.2",

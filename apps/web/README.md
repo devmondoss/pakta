@@ -24,4 +24,7 @@ puerto 4000 por defecto y necesita `DATABASE_URL`; consulta
 | `NEXT_PUBLIC_API_URL` | API usada por acciones desde el navegador | `http://localhost:4000` |
 
 Las vistas no usan datos mock: leen la API sin caché. Las acciones de receipt,
-reverificación de wallet y revalidación actualizan la vista al terminar.
+reverificación de wallet y revalidación actualizan la vista al terminar. Cuando
+`/health` anuncia settlement `enabled`, un payable `READY` puede liquidarse
+desde su tarjeta. El detalle de un payable `SETTLED` enlaza la transacción en
+Stellar Expert y muestra su proof hash y estado ERP.

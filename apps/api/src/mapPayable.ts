@@ -1,4 +1,4 @@
-import type { CanonicalPayable, Settlement } from "@pakta/canonical-model";
+import type { CanonicalPayable } from "@pakta/canonical-model";
 import type { KernelResult } from "@pakta/rules-kernel";
 
 /**
@@ -14,7 +14,21 @@ export type ApiPayable = {
   poId: string;
   amount: string;
   dueDate: string;
+  /**
+   * SETTLED overrides the kernel. Once a payable is paid its fingerprint is
+   * recorded as settled, so re-evaluating it yields PAYMENT_ALREADY_SETTLED —
+   * which is correct for any *other* payable claiming the same invoice, but
+   * would misreport the one that was actually paid as blocked.
+   */
   status: "READY" | "BLOCKED" | "SETTLED";
+  settlement?: {
+    txHash: string;
+    ledger: number;
+    proofHash: string;
+    explorerUrl: string;
+    network: string;
+    erpPostingStatus: string;
+  };
   exception?: {
     reason: string;
     message: string;
@@ -22,21 +36,18 @@ export type ApiPayable = {
     ownerRole: string;
     requiredAction: string;
   };
-  settlement?: {
-    txHash: string;
-    ledger: number;
-    network: string;
-    erpPostingStatus: string;
-  };
 };
 
-/**
- * `settlement`, when present, wins over the kernel's own READY/BLOCKED —
- * once Dev 1 reports a payable settled it stays SETTLED regardless of
- * what a re-evaluation would say (the kernel has no notion of settlement
- * at all; that state lives only in `@pakta/db`'s `settlements` table).
- */
-export function toApiPayable(payable: CanonicalPayable, result: KernelResult, settlement?: Settlement): ApiPayable {
+export type SettledInfo = {
+  txHash: string;
+  ledger: number;
+  proofHash: string;
+  explorerUrl: string;
+  network: string;
+  erpPostingStatus: string;
+};
+
+export function toApiPayable(payable: CanonicalPayable, result: KernelResult, settled?: SettledInfo): ApiPayable {
   const base: ApiPayable = {
     payableId: payable.payableId,
     invoiceId: payable.invoice.invoiceId,
@@ -48,14 +59,9 @@ export function toApiPayable(payable: CanonicalPayable, result: KernelResult, se
     status: result.status,
   };
 
-  if (settlement) {
+  if (settled) {
     base.status = "SETTLED";
-    base.settlement = {
-      txHash: settlement.settlement.tx_hash,
-      ledger: settlement.settlement.ledger,
-      network: settlement.settlement.network,
-      erpPostingStatus: settlement.erp_posting_status,
-    };
+    base.settlement = settled;
     return base;
   }
 

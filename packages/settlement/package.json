@@ -1,0 +1,23 @@
+{
+  "name": "@pakta/settlement",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@pakta/canonical-model": "workspace:*",
+    "@pakta/proof-hash": "workspace:*",
+    "@pakta/stellar-sdk-wrapper": "workspace:*",
+    "@stellar/stellar-sdk": "17.1.0"
+  },
+  "devDependencies": {
+    "@pakta/ingestion": "workspace:*",
+    "@pakta/proof-builder": "workspace:*",
+    "@pakta/rules-kernel": "workspace:*",
+    "@types/node": "24.13.6"
+  }
+}

@@ -2,7 +2,7 @@ use super::{Harness, MAX_PER_WINDOW, ONE_USDC, WINDOW_SECONDS};
 use crate::types::{Error, Status};
 use ed25519_dalek::SigningKey;
 use soroban_sdk::testutils::Address as _;
-use soroban_sdk::{symbol_short, Address, BytesN, Vec};
+use soroban_sdk::{Address, BytesN, Vec};
 
 #[test]
 fn initialize_cannot_run_twice() {
@@ -103,36 +103,6 @@ fn the_executor_can_be_rotated() {
     h.client.set_executor(&new_executor);
 
     assert_eq!(h.client.get_config().executor, new_executor);
-}
-
-#[test]
-fn attest_lifecycle_records_a_phase_without_touching_status() {
-    // The audit trail of §8.5. It emits and nothing else — a compromised
-    // issuer cannot use it to unblock money.
-    let h = Harness::vault();
-    let id = h.register(&h.proposal(72, 5_000 * ONE_USDC));
-
-    h.client
-        .attest_lifecycle(&id, &symbol_short!("WALLET"), &symbol_short!("blocked"));
-    h.client
-        .attest_lifecycle(&id, &symbol_short!("WALLET"), &symbol_short!("resolved"));
-
-    assert_eq!(
-        h.client.get_payable(&id).unwrap().status,
-        Status::Ready,
-        "an attestation must not move the gate"
-    );
-}
-
-#[test]
-fn an_unknown_lifecycle_phase_is_refused() {
-    let h = Harness::vault();
-    let id = h.register(&h.proposal(73, 5_000 * ONE_USDC));
-
-    let result =
-        h.client
-            .try_attest_lifecycle(&id, &symbol_short!("WALLET"), &symbol_short!("nonsense"));
-    assert_eq!(result, Err(Ok(Error::UnknownPhase)));
 }
 
 #[test]

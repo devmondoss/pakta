@@ -140,4 +140,8 @@ pub enum Error {
     /// `withdraw` only means something when the contract itself holds the
     /// float. With an external treasury as payer there is nothing to withdraw.
     NotAVault = 21,
+    /// The proof's expiry is further out than the gate will ever honour. The
+    /// anti-replay retention is sized against this ceiling, so accepting a
+    /// longer window would quietly break that guarantee.
+    ProofWindowTooLong = 22,
 }

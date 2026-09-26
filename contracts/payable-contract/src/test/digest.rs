@@ -212,7 +212,8 @@ fn address_to_bytes_matches_the_strkey_decoder() {
 #[test]
 fn revocation_digest_matches_the_typescript_vector() {
     use crate::digest::{
-        revocation_digest, revocation_preimage, RevocationFields, REVOCATION_PREIMAGE_LEN,
+        reason_hash, revocation_digest, revocation_preimage, RevocationFields,
+        REVOCATION_PREIMAGE_LEN,
     };
 
     let env = Env::default();
@@ -233,8 +234,20 @@ fn revocation_digest_matches_the_typescript_vector() {
             &env,
             "0218cfa6ab5a1bee3ae8827f94037542745abca1f1e69711c1961e37014043a4",
         ),
+        reason_hash: reason_hash(
+            &env,
+            &soroban_sdk::String::from_str(&env, "VENDOR_WALLET_CHANGED"),
+        ),
     };
 
+    // SHA-256("VENDOR_WALLET_CHANGED"), matching Node's crypto.
+    assert_eq!(
+        fields.reason_hash,
+        hex32(
+            &env,
+            "47427270812d52a0310f8f2513800a3112878a0cce7c40a28ade645424af3624"
+        )
+    );
     assert_eq!(
         revocation_preimage(&env, &fields).len(),
         REVOCATION_PREIMAGE_LEN
@@ -243,7 +256,7 @@ fn revocation_digest_matches_the_typescript_vector() {
         revocation_digest(&env, &fields),
         hex32(
             &env,
-            "cf4f85ed03a7d850a9196a9f08433879d6af0b6e5e71155ae32427bb5e143f9e"
+            "795f6762ec74115526849f4d61ff677148e8fc9fe8161990e71917613a15c387"
         )
     );
 }
@@ -261,7 +274,41 @@ fn the_two_digests_never_collide() {
             contract_id: demo_fields(&env).contract_id,
             payable_id_hash: demo_fields(&env).payable_id_hash,
             proof_hash: demo_fields(&env).proof_hash,
+            reason_hash: demo_fields(&env).proof_hash,
         },
     );
     assert_ne!(registration, revocation);
+}
+
+/// Same vector as `@pakta/proof-hash`'s attestation test.
+#[test]
+fn attestation_digest_matches_the_typescript_vector() {
+    use crate::digest::{
+        attestation_digest, attestation_preimage, reason_hash, AttestationFields,
+        ATTESTATION_PREIMAGE_LEN,
+    };
+
+    let env = Env::default();
+    let fields = AttestationFields {
+        network_id: demo_fields(&env).network_id,
+        contract_id: demo_fields(&env).contract_id,
+        payable_id_hash: demo_fields(&env).payable_id_hash,
+        phase: 0,
+        reason_hash: reason_hash(
+            &env,
+            &soroban_sdk::String::from_str(&env, "VENDOR_WALLET_CHANGED"),
+        ),
+        sequence: 1,
+    };
+
+    let preimage = attestation_preimage(&env, &fields);
+    assert_eq!(preimage.len(), ATTESTATION_PREIMAGE_LEN);
+    assert_eq!(preimage.get(109).unwrap(), 0);
+    assert_eq!(
+        attestation_digest(&env, &fields),
+        hex32(
+            &env,
+            "7dea7c29a2950c5cf6e2748f9ba149a5522a979ea5dfd788db8902440da71fe9"
+        )
+    );
 }

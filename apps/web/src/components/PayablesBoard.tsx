@@ -22,6 +22,7 @@ export function PayablesBoard({
   onPayablesChange?: (payables: Payable[]) => void;
 }) {
   const [payables, setPayables] = useState(initialPayables);
+  const [settlementEnabled, setSettlementEnabled] = useState(false);
   // `router.refresh()` after an action re-renders the page with fresh
   // props; without this the board kept showing stale state until the
   // next 4 s poll, so a click looked like it did nothing.
@@ -31,6 +32,13 @@ export function PayablesBoard({
   // el estado interno del board.
   useEffect(() => onPayablesChange?.(payables), [payables, onPayablesChange]);
   const vendorById = new Map(vendors.map((v) => [v.vendorId, v]));
+
+  useEffect(() => {
+    fetch(`${API_URL}/health`, { cache: "no-store" })
+      .then((res) => res.ok ? res.json() : Promise.reject())
+      .then((health) => setSettlementEnabled(health.settlement === "enabled"))
+      .catch(() => setSettlementEnabled(false));
+  }, []);
 
   // Polls independently of navigation — a resolved exception (or a
   // settlement Dev 1 reports) shows up here on its own, without anyone
@@ -66,7 +74,12 @@ export function PayablesBoard({
                 <p className="payable-column-empty">Nada acá todavía.</p>
               ) : (
                 items.map((payable) => (
-                  <PayableCard key={payable.payableId} payable={payable} vendor={vendorById.get(payable.vendorId)} />
+                  <PayableCard
+                    key={payable.payableId}
+                    payable={payable}
+                    vendor={vendorById.get(payable.vendorId)}
+                    settlementEnabled={settlementEnabled}
+                  />
                 ))
               )}
             </div>

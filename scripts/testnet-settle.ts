@@ -355,6 +355,8 @@ async function main() {
       contractId: GATE,
       payableId: revokedId,
       proofHash: revokedProofHash,
+      // Signed since revocation V2 — must match the --reason_code sent below.
+      reasonCode: "WALLET",
     }),
   );
   const revokeTx = invokeAndGetTx([

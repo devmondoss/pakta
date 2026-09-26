@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev1, tonny-dev]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  typescript:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.PAKTA_TEST_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4 # version comes from package.json "packageManager"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm typecheck
+      - name: PostgreSQL integration tests
+        if: env.DATABASE_URL != ''
+        run: pnpm test:integration
+
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32v1-none
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: contracts
+      - run: cargo fmt --manifest-path contracts/Cargo.toml --all -- --check
+      - run: cargo clippy --manifest-path contracts/Cargo.toml --all-targets -- -D warnings
+      - run: cargo test --manifest-path contracts/Cargo.toml --workspace
+      # The deployable artifact. `stellar contract build` wraps this same target.
+      - run: cargo build --manifest-path contracts/Cargo.toml --target wasm32v1-none --release

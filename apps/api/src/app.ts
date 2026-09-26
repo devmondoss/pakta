@@ -2,42 +2,53 @@ import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import type { Vendor, VendorWallet } from "@pakta/canonical-model";
 import {
-  addSettledFingerprint,
   attestWallet,
-  AlreadySettledError,
   confirmReceipt,
-  getSettlement,
   listActivity,
   listIntakeRuns,
   logActivity,
   NoSettlementError,
-  recordSettlement,
   registerWalletChange,
   resetDb,
   updateErpPostingStatus,
 } from "@pakta/db";
 import { buildProofOfPayable, ProofBuilderError } from "@pakta/proof-builder";
-import { invoiceFingerprint } from "@pakta/rules-kernel";
 import { createNvidiaExtractor, type InvoiceExtractor } from "@pakta/ai-extraction";
+import { GateError, SettlementRefused, type Deployment } from "@pakta/settlement";
+import { isAccountId, unitsToDecimal } from "@pakta/stellar-sdk-wrapper";
 import Fastify from "fastify";
 import { getDb } from "./db.js";
 import { evaluateLive } from "./demoData.js";
 import { DEMO_VARIANTS } from "./demoVariants.js";
 import { ingestAndPersist, ingestPdfAndPersist, loadPolicy, seedDemo, seedIfEmpty } from "./ingest.js";
-import { toApiPayable } from "./mapPayable.js";
+import { toApiPayable, type SettledInfo } from "./mapPayable.js";
+import {
+  createSettlementServices,
+  explorerTxUrl,
+  settlementContext,
+  type ChainFactory,
+  type SettlementServices,
+} from "./settlement.js";
+
+export type BuildAppOptions = {
+  /** Overrides how the on-chain services are built — tests inject an in-memory gate here. */
+  chain?: ChainFactory;
+  deployment?: Deployment;
+  now?: () => Date;
+  logger?: boolean;
+  extractor?: InvoiceExtractor;
+};
 
 function isPdf(filename: string, mimetype: string, buffer: Buffer): boolean {
   return mimetype === "application/pdf" || filename.toLowerCase().endsWith(".pdf") || buffer.subarray(0, 5).toString() === "%PDF-";
 }
 
-/**
- * `extractor` is injectable so tests can exercise the PDF path without a
- * network call; by default it's built lazily on the first PDF upload, so
- * a missing NVIDIA_API_KEY only fails PDF intake, never boot.
- */
-export async function buildApp(opts: { extractor?: InvoiceExtractor } = {}) {
-  let extractor = opts.extractor;
-  const app = Fastify({ logger: true });
+const CHAIN_DISABLED =
+  "on-chain settlement is not configured: set PAKTA_ISSUER_SECRET and PAKTA_EXECUTOR_SECRET to enable it";
+
+export async function buildApp(options: BuildAppOptions = {}) {
+  let extractor = options.extractor;
+  const app = Fastify({ logger: options.logger ?? true });
   await app.register(cors, { origin: true });
   // @fastify/multipart defaults to 1 MB — too small for a real exported
   // invoice PDF. 20 MB covers scanned/multi-page invoices comfortably.
@@ -45,7 +56,13 @@ export async function buildApp(opts: { extractor?: InvoiceExtractor } = {}) {
 
   const db = await getDb();
   await seedIfEmpty(db);
-
+  const now = options.now ?? (() => new Date());
+  const settlement: SettlementServices = createSettlementServices(db, {
+    deployment: options.deployment,
+    chain: options.chain,
+    now,
+  });
+  const { store, deployment } = settlement;
   /**
    * The real intake endpoint. An uploaded `.xlsx` goes through
    * `ingestWorkbook` and every resulting payable gets persisted to
@@ -78,6 +95,18 @@ export async function buildApp(opts: { extractor?: InvoiceExtractor } = {}) {
       return reply.code(400).send({ error: `could not parse workbook: ${(err as Error).message}` });
     }
   });
+  async function settledInfo(payableId: string): Promise<SettledInfo | undefined> {
+    const record = await store.getSettlement(payableId);
+    if (!record) return undefined;
+    return {
+      txHash: record.txHash,
+      ledger: record.ledger,
+      proofHash: record.proofHash,
+      explorerUrl: explorerTxUrl(deployment, record.txHash),
+      network: deployment.network,
+      erpPostingStatus: record.erpPostingStatus,
+    };
+  }
 
   /** Las 5 variantes que el picker de "Usar datos de ejemplo" ofrece — solo índice + nombre, nunca los montos/relaciones internas. */
   app.get("/demo/variants", async () => DEMO_VARIANTS.map((v, index) => ({ index, label: v.label })));
@@ -89,9 +118,12 @@ export async function buildApp(opts: { extractor?: InvoiceExtractor } = {}) {
    * reseeda por el mismo camino que `resetDemo.ts`, así el resultado es
    * siempre el 1 READY + 4 BLOCKED canónico, sin importar qué haya dejado
    * un ensayo anterior. `variantIndex` es la elección explícita del
-   * picker; sin body, se sortea (usado también al arrancar el server).
+   * picker; sin body, se sortea. El arranque usa la variante 0 para ser reproducible.
    */
-  app.post<{ Body: { variantIndex?: number } }>("/demo/reset", async (request) => {
+  app.post<{ Body: { variantIndex?: number } }>("/demo/reset", async (request, reply) => {
+    if (settlement.chain || (db.schema === "public" && process.env.PAKTA_DEMO_RESET_ENABLED !== "true")) {
+      return reply.code(403).send({ error: "demo reset requires PAKTA_DEMO_RESET_ENABLED=true and no live settlement" });
+    }
     await resetDb(db);
     const { variantLabel, invoices, ingested, rejectedRows } = await seedDemo(db, request.body?.variantIndex);
     return { kind: "workbook", ingested, rejectedRows, variantLabel, invoices };
@@ -103,25 +135,30 @@ export async function buildApp(opts: { extractor?: InvoiceExtractor } = {}) {
   /** El historial de pruebas que muestra el panel de Intake — solo cargas de datos de ejemplo, workbooks y PDFs. */
   app.get("/activity/runs", async () => listIntakeRuns(db));
 
-  app.get("/health", async () => ({ status: "ok" }));
+  app.get("/health", async () => ({
+    status: "ok",
+    network: deployment.network,
+    gate: deployment.contractId,
+    settlement: settlement.chain ? "enabled" : "disabled",
+  }));
 
   app.get("/policy", async () => loadPolicy());
 
   app.get("/payables", async () => {
-    const { payables, results } = await evaluateLive(db);
+    const { payables, results } = await evaluateLive(db, now());
     const byPayableId = new Map(results.map((r) => [r.payableId, r]));
 
     return Promise.all(
       payables.map(async (payable) => {
         const result = byPayableId.get(payable.payableId);
         if (!result) throw new Error(`no kernel result for ${payable.payableId}`);
-        return toApiPayable(payable, result, await getSettlement(db, payable.payableId));
+        return toApiPayable(payable, result, await settledInfo(payable.payableId));
       }),
     );
   });
 
   app.get<{ Params: { payableId: string } }>("/payables/:payableId/proof", async (request, reply) => {
-    const { payables, results } = await evaluateLive(db);
+    const { payables, results } = await evaluateLive(db, now());
     const payable = payables.find((p) => p.payableId === request.params.payableId);
     const result = results.find((r) => r.payableId === request.params.payableId);
     if (!payable || !result) {
@@ -129,7 +166,7 @@ export async function buildApp(opts: { extractor?: InvoiceExtractor } = {}) {
     }
 
     try {
-      return buildProofOfPayable(payable, result, new Date());
+      return buildProofOfPayable(payable, result, now());
     } catch (err) {
       if (err instanceof ProofBuilderError) {
         return reply.code(409).send({ error: err.message });
@@ -147,85 +184,193 @@ export async function buildApp(opts: { extractor?: InvoiceExtractor } = {}) {
    * relying on a background poll of the list endpoint.
    */
   app.post<{ Params: { payableId: string } }>("/payables/:payableId/revalidate", async (request, reply) => {
-    const { payables, results } = await evaluateLive(db);
+    const { payables, results } = await evaluateLive(db, now());
     const payable = payables.find((p) => p.payableId === request.params.payableId);
     const result = results.find((r) => r.payableId === request.params.payableId);
     if (!payable || !result) {
       return reply.code(404).send({ error: `no payable ${request.params.payableId}` });
     }
-    return toApiPayable(payable, result);
-  });
-
-  app.get<{ Params: { payableId: string } }>("/payables/:payableId/settlement", async (request, reply) => {
-    const settlement = await getSettlement(db, request.params.payableId);
-    if (!settlement) return reply.code(404).send({ error: `no settlement for ${request.params.payableId}` });
-    return settlement;
+    return toApiPayable(payable, result, await settledInfo(payable.payableId));
   });
 
   /**
-   * The other half of the Dev 1 <-> Dev 2 contract: `ProofOfPayable` flows
-   * out via GET /payables/:id/proof, `Settlement` flows back in here once
-   * the Settlement Adapter has actually executed the transfer on Stellar.
-   * Refuses a payable that isn't READY (never trust a client-reported
-   * settlement for something the kernel itself would still block) and
-   * refuses a double-settle (`@pakta/db`'s `payable_id` primary key makes
-   * that the actual source of truth, this just surfaces it as a 409).
-   * Also feeds the settled fingerprint back into
-   * `settled_invoice_fingerprints`, so a *different* payable for the same
-   * vendor+amount correctly gets caught by the kernel's own
-   * `PAYMENT_ALREADY_SETTLED` rule instead of slipping through.
+   * Settles one payable on Stellar.
+   *
+   * The kernel is re-run first, against the live state, at the moment of
+   * settling (§14.3) — a payable that was READY when the page loaded but whose
+   * vendor wallet changed since is refused here, not paid. Only then is a
+   * fresh proof built and signed, and the adapter takes it on-chain. The
+   * request carries no amount and no destination: those come from the proof.
    */
-  app.post<{
-    Params: { payableId: string };
-    Body: { asset?: string; amount?: string; txHash?: string; ledger?: number; erpPostingStatus?: string };
-  }>("/payables/:payableId/settlement", async (request, reply) => {
-    const { payables, results } = await evaluateLive(db);
-    const payable = payables.find((p) => p.payableId === request.params.payableId);
-    const result = results.find((r) => r.payableId === request.params.payableId);
-    if (!payable || !result) {
-      return reply.code(404).send({ error: `no payable ${request.params.payableId}` });
-    }
-    if (result.status !== "READY") {
-      return reply.code(409).send({ error: `${payable.payableId} is not READY, refusing to record a settlement` });
-    }
+  app.post<{ Params: { payableId: string } }>("/payables/:payableId/settle", async (request, reply) => {
+    const payableId = request.params.payableId;
+    const existing = await settledInfo(payableId);
+    if (existing) return { status: "ALREADY_SETTLED", payableId, settlement: existing };
 
-    const poId = payable.purchaseOrder?.poId ?? payable.invoice.poId;
-    const { asset, amount, txHash, ledger, erpPostingStatus } = request.body ?? {};
-    if (!poId || !asset || !amount || !txHash || typeof ledger !== "number") {
-      return reply.code(400).send({ error: "asset, amount, txHash, and ledger (number) are required" });
-    }
-    if (erpPostingStatus && !["PENDING", "RECONCILED", "FAILED"].includes(erpPostingStatus)) {
-      return reply.code(400).send({ error: "erpPostingStatus must be PENDING, RECONCILED, or FAILED" });
+    if (!settlement.chain) return reply.code(503).send({ error: CHAIN_DISABLED });
+
+    const at = now();
+    const { payables, results } = await evaluateLive(db, at);
+    const payable = payables.find((p) => p.payableId === payableId);
+    const result = results.find((r) => r.payableId === payableId);
+    if (!payable || !result) return reply.code(404).send({ error: `no payable ${payableId}` });
+
+    if (result.status !== "READY") {
+      return reply.code(409).send({
+        error: `${payableId} is not payable right now`,
+        exception: toApiPayable(payable, result).exception,
+      });
     }
 
     try {
-      const settlement = await recordSettlement(
-        db,
-        {
-          payableId: payable.payableId,
-          invoiceId: payable.invoice.invoiceId,
-          poId,
-          asset,
-          amount,
-          txHash,
-          ledger,
-          erpPostingStatus: erpPostingStatus as "PENDING" | "RECONCILED" | "FAILED" | undefined,
-        },
-        new Date(),
-      );
-      await addSettledFingerprint(db, invoiceFingerprint(payable), `settled via ${payable.payableId}`);
-      await logActivity(db, `Settlement registrado para ${payable.payableId} (tx ${txHash})`);
-      return settlement;
-    } catch (err) {
-      if (err instanceof AlreadySettledError) {
-        return reply.code(409).send({ error: err.message });
+      const proof = buildProofOfPayable(payable, result, at);
+      const { signed } = settlement.chain.issuer.sign(proof, deployment);
+      const outcome = await settlement.chain.adapter.settle(signed, settlementContext(payable));
+      if (outcome.status === "ALREADY_SETTLED") {
+        return { status: "ALREADY_SETTLED", payableId, settlement: await settledInfo(payableId) };
       }
+      await logActivity(db, `Settlement confirmado en Stellar para ${payableId} (tx ${outcome.settleTx.txHash})`)
+        .catch((error: unknown) => request.log.warn({ err: error }, "settlement activity log failed"));
+      return {
+        status: "SETTLED",
+        payableId,
+        settlement: outcome.settlement,
+        explorerUrl: explorerTxUrl(deployment, outcome.settleTx.txHash),
+        registerTx: outcome.registerTx?.txHash,
+      };
+    } catch (err) {
+      if (err instanceof SettlementRefused) {
+        return reply.code(409).send({ error: err.message, reason: err.reason });
+      }
+      if (err instanceof ProofBuilderError) return reply.code(409).send({ error: err.message });
       throw err;
     }
   });
 
   /**
-   * Demo-only: the ERP posting confirmation is a separate, asynchronous
+   * Cancels a registered payable before it settles — the on-chain brake for
+   * evidence that went stale. The issuer signs the cancellation, reason
+   * included, so the event records the issuer's justification.
+   */
+  app.post<{ Params: { payableId: string }; Body: { reason?: string } }>(
+    "/payables/:payableId/revoke",
+    async (request, reply) => {
+      if (!settlement.chain) return reply.code(503).send({ error: CHAIN_DISABLED });
+      const reason = request.body?.reason?.trim();
+      if (!reason) return reply.code(400).send({ error: "reason is required" });
+
+      const proof = await store.getProof(request.params.payableId);
+      if (!proof) return reply.code(404).send({ error: `${request.params.payableId} was never registered by this backend` });
+
+      const signature = settlement.chain.issuer.signRevocation(proof.payableId, proof.proofHash, reason, deployment);
+      try {
+        const tx = await settlement.chain.gate.revokePayable(proof.payableIdHash, reason, [
+          { issuerPublicKeyHex: settlement.chain.issuer.publicKeyHex, signature },
+        ]);
+        await store.setProofStatus(proof.payableIdHash, "REVOKED");
+        return { status: "REVOKED", payableId: proof.payableId, reason, txHash: tx.txHash, explorerUrl: explorerTxUrl(deployment, tx.txHash) };
+      } catch (err) {
+        if (err instanceof GateError) return reply.code(409).send({ error: err.message, code: err.code });
+        throw err;
+      }
+    },
+  );
+
+  app.get("/settlements", async () =>
+    (await store.listSettlements()).map((s) => ({ ...s, explorerUrl: explorerTxUrl(deployment, s.txHash) })),
+  );
+
+  /**
+   * The reconciliation chain of `Pakta_Documento_Maestro.md` §25, for one
+   * payable: the Stellar transaction, the settlement it produced, the proof
+   * that authorized it, and the raw on-chain events — each pointing at the
+   * next, so an auditor can walk from money back to the invoice.
+   */
+  app.get<{ Params: { payableId: string } }>("/settlements/:payableId", async (request, reply) => {
+    const record = await store.getSettlement(request.params.payableId);
+    const proof = await store.getProof(request.params.payableId);
+    if (!record && !proof) return reply.code(404).send({ error: `nothing on record for ${request.params.payableId}` });
+    return {
+      settlement: record ? { ...record, explorerUrl: explorerTxUrl(deployment, record.txHash) } : undefined,
+      proof,
+      events: proof ? await store.listChainEvents(proof.payableIdHash) : [],
+    };
+  });
+
+  /** Reconciliation export back to the spreadsheet world the SME already lives in. */
+  app.get("/reconciliation.csv", async (_request, reply) => {
+    const header = [
+      "payable_id",
+      "invoice_id",
+      "po_id",
+      "amount",
+      "asset",
+      "tx_hash",
+      "ledger",
+      "proof_hash",
+      "contract_id",
+      "erp_posting_status",
+      "settled_at",
+      "explorer_url",
+    ];
+    const quote = (v: string | number) => {
+      const s = String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const rows = (await store.listSettlements()).map((s) =>
+      [
+        s.payableId,
+        s.invoiceId,
+        s.poId,
+        s.amount,
+        s.asset,
+        s.txHash,
+        s.ledger,
+        s.proofHash,
+        s.contractId,
+        s.erpPostingStatus,
+        s.settledAt,
+        explorerTxUrl(deployment, s.txHash),
+      ]
+        .map(quote)
+        .join(","),
+    );
+    reply.header("content-type", "text/csv; charset=utf-8");
+    reply.header("content-disposition", 'attachment; filename="pakta-reconciliation.csv"');
+    return `${[header.join(","), ...rows].join("\n")}\n`;
+  });
+
+  /** What the vault holds, what is promised, and what could still leave. */
+  app.get("/vault", async (_request, reply) => {
+    if (!settlement.chain) return reply.code(503).send({ error: CHAIN_DISABLED });
+    const [committed, available] = await Promise.all([
+      settlement.chain.gate.getCommitted(),
+      settlement.chain.gate.getAvailable(),
+    ]);
+    return {
+      network: deployment.network,
+      contractId: deployment.contractId,
+      asset: deployment.assetCode,
+      committed: unitsToDecimal(committed),
+      available: unitsToDecimal(available),
+      settledCount: (await store.listSettlements()).length,
+    };
+  });
+
+  /** Runs one Settlement Agent cycle on demand — the same cycle the background loop runs. */
+  app.post("/agent/run", async (_request, reply) => {
+    if (!settlement.chain) return reply.code(503).send({ error: CHAIN_DISABLED });
+    return settlement.chain.agent.runOnce();
+  });
+
+  app.get<{ Params: { payableId: string } }>("/payables/:payableId/settlement", async (request, reply) => {
+    const record = await store.getSettlement(request.params.payableId);
+    if (!record) return reply.code(404).send({ error: `no settlement for ${request.params.payableId}` });
+    return { ...record, explorerUrl: explorerTxUrl(deployment, record.txHash) };
+  });
+
+  /**
+   * The ERP posting confirmation is a separate, asynchronous
    * event in real life — this lets the UI move a settlement from PENDING
    * to RECONCILED (or FAILED) so the "Reconciliación" pipeline stage has
    * something to actually trigger during a demo.
@@ -253,7 +398,7 @@ export async function buildApp(opts: { extractor?: InvoiceExtractor } = {}) {
   });
 
   app.get("/vendors", async () => {
-    const { payables } = await evaluateLive(db);
+    const { payables } = await evaluateLive(db, now());
     const seen = new Map<string, { vendor: Vendor; wallet?: VendorWallet }>();
     for (const p of payables) {
       if (!seen.has(p.vendor.vendorId)) seen.set(p.vendor.vendorId, { vendor: p.vendor, wallet: p.vendorWallet });
@@ -274,6 +419,12 @@ export async function buildApp(opts: { extractor?: InvoiceExtractor } = {}) {
     async (request, reply) => {
       const address = request.body?.address?.trim();
       if (!address) return reply.code(400).send({ error: "address is required" });
+      // Checksum included. Accepting a malformed address here would let a
+      // vendor's payables clear every rule and still be impossible to settle —
+      // the proof builder would refuse them at the very last step.
+      if (!isAccountId(address)) {
+        return reply.code(400).send({ error: `${address} is not a valid Stellar account id (G..., 56 characters)` });
+      }
 
       const wallet = await registerWalletChange(db, request.params.vendorId, address, new Date());
       await logActivity(db, `Nueva wallet registrada para ${request.params.vendorId} (pendiente de atestiguar)`);
@@ -321,7 +472,7 @@ export async function buildApp(opts: { extractor?: InvoiceExtractor } = {}) {
   });
 
   app.get("/summary", async () => {
-    const { payables, results } = await evaluateLive(db);
+    const { payables, results } = await evaluateLive(db, now());
     const byPayableId = new Map(results.map((r) => [r.payableId, r]));
 
     let totalRequested = 0;
@@ -337,7 +488,7 @@ export async function buildApp(opts: { extractor?: InvoiceExtractor } = {}) {
       totalRequested += amount;
       const result = byPayableId.get(p.payableId);
 
-      if (await getSettlement(db, p.payableId)) {
+      if (await store.getSettlement(p.payableId)) {
         totalSettled += amount;
         settledCount++;
       } else if (result?.status === "READY") {
