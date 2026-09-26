@@ -3,9 +3,11 @@ import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { FakeGate, Issuer, SettlementAdapter, SettlementAgent } from "@pakta/settlement";
+import { resetDb } from "@pakta/db";
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../api/src/app.js";
+import { getDb } from "../../api/src/db.js";
 import { createPaktaTools, type ApiClient } from "../src/tools.js";
 
 /**
@@ -22,6 +24,7 @@ let app: FastifyInstance;
 let tools: ReturnType<typeof createPaktaTools>;
 
 beforeAll(async () => {
+  await resetDb(await getDb());
   app = await buildApp({
     logger: false,
     now: () => NOW,

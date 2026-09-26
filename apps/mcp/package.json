@@ -17,6 +17,7 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
+    "@pakta/db": "workspace:*",
     "@pakta/settlement": "workspace:*",
     "@types/node": "24.13.6",
     "tsx": "4.23.15"

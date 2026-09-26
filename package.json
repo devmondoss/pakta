@@ -7,7 +7,8 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "vitest run",
+    "test": "vitest run --project ai-extraction --project canonical-model --project exception-service --project ingestion --project proof-builder --project proof-hash --project rules-kernel --project settlement --project stellar-sdk-wrapper",
+    "test:integration": "node scripts/test-integration.mjs",
     "test:watch": "vitest",
     "typecheck": "node scripts/typecheck.mjs",
     "build:fixture": "tsx fixtures/demo-workbook/build-fixture.ts",

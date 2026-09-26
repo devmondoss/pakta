@@ -120,6 +120,12 @@ es necesaria para la ingesta de PDFs. Para verificar el contrato Soroban:
 pnpm contract:test
 ```
 
+Para validar el monorepo, `pnpm test` ejecuta las pruebas que no necesitan
+servicios externos. `pnpm test:integration` carga `DATABASE_URL` desde `.env` y
+ejecuta en secuencia las suites de PostgreSQL, API y MCP sobre el esquema
+`pakta_test`. En GitHub Actions, la suite de integración corre cuando está
+configurado el secreto `PAKTA_TEST_DATABASE_URL`.
+
 ---
 
 ## 📄 Documentación

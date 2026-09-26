@@ -7,7 +7,6 @@ export default mergeConfig(
     test: {
       name: "mcp",
       include: ["test/**/*.test.ts"],
-      env: { DB_PATH: ":memory:" },
     },
   }),
 );

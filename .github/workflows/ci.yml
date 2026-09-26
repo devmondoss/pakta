@@ -11,16 +11,21 @@ permissions:
 jobs:
   typescript:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.PAKTA_TEST_DATABASE_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4 # version comes from package.json "packageManager"
       - uses: actions/setup-node@v4
         with:
-          node-version: 24 # node:sqlite (packages/db) needs >= 22.5
+          node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
       - run: pnpm typecheck
+      - name: PostgreSQL integration tests
+        if: env.DATABASE_URL != ''
+        run: pnpm test:integration
 
   contract:
     runs-on: ubuntu-latest
