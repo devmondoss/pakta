@@ -13,6 +13,7 @@ import {
   getReceipt,
   getWallet,
   listPayables,
+  logActivity,
   seedReceiptIfAbsent,
   seedWalletIfAbsent,
   upsertPayable,
@@ -21,6 +22,7 @@ import {
 import { ingestWorkbook, type RejectedRow } from "@pakta/ingestion";
 import { loadPolicyFromYaml } from "@pakta/rules-kernel";
 import type { Policy } from "@pakta/canonical-model";
+import { buildDemoWorkbookBuffer, invoiceSummary, pickVariant } from "./demoVariants.js";
 
 const fixturesDir = path.resolve(import.meta.dirname, "../../../fixtures/demo-workbook");
 
@@ -115,23 +117,46 @@ export async function ingestPdfAndPersist(
   }
 
   await upsertPayable(db, resolved.payable, new Date());
+  await logActivity(db, `Factura PDF leída por IA — ${resolved.payable.payableId} ingestado`);
   return { extraction, status: "CANDIDATE", payableId: resolved.payable.payableId };
 }
 
 /**
- * Boot-time only: if the DB has never been ingested into, load the demo
- * workbook through the exact same path a real upload takes. After this
- * runs once, the table is ordinary persisted data — this never runs
- * again once anything exists, so it never clobbers a real upload.
+ * Loads a demo variant (`./demoVariants.ts` — same amounts/PO/receipt/
+ * wallet relationships as the canonical fixture, different vendor names
+ * per variant so "Usar datos de ejemplo" doesn't show the same five
+ * companies every time) through the exact same path a real upload takes,
+ * PLUS the one external fact the demo depends on (§25 maestro) that no
+ * workbook upload could ever carry: INV-1994 for the vendor in INV-002's
+ * slot was already recorded 11 days before this batch, so INV-002
+ * correctly lands on DUPLICATE_INVOICE instead of READY. Without this
+ * fact seeded, the canonical 1 READY + 4 BLOCKED demo doesn't reproduce
+ * — it's persisted DB state, not something baked into the xlsx.
+ *
+ * `variantIndex` comes from the picker in the UI (an explicit user
+ * choice); left undefined only at boot time (`seedIfEmpty`), where
+ * there's no one to ask and a random pick is the only option.
+ */
+export async function seedDemo(
+  db: Db,
+  variantIndex?: number,
+): Promise<IngestOutcome & { variantLabel: string; invoices: ReturnType<typeof invoiceSummary> }> {
+  const variant = pickVariant(variantIndex);
+  const workbookBuffer = await buildDemoWorkbookBuffer(variant);
+  const outcome = await ingestAndPersist(db, workbookBuffer);
+  await addKnownFingerprint(db, "VEN-002|3500.00", "INV-1994, recorded 11 days before the demo batch");
+  const invoices = invoiceSummary(variant);
+  await logActivity(db, `Datos de ejemplo cargados — ${variant.label} (${invoices.length} invoices)`);
+  return { ...outcome, variantLabel: variant.label, invoices };
+}
+
+/**
+ * Boot-time only: if the DB has never been ingested into, seed the demo.
+ * After this runs once, the table is ordinary persisted data — this
+ * never runs again once anything exists, so it never clobbers a real
+ * upload.
  */
 export async function seedIfEmpty(db: Db): Promise<void> {
   if ((await countPayables(db)) > 0) return;
-  const workbookBuffer = readFileSync(path.join(fixturesDir, "demo-workbook.xlsx"));
-  await ingestAndPersist(db, workbookBuffer);
-
-  // The one external fact the canonical demo depends on (§25 maestro):
-  // INV-1994 for Northline Supplies was already recorded 11 days before
-  // the demo batch — not something ingestion itself would ever produce,
-  // it's a fact about invoice history predating this workbook.
-  await addKnownFingerprint(db, "VEN-002|3500.00", "INV-1994, recorded 11 days before the demo batch");
+  await seedDemo(db);
 }

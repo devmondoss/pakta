@@ -5,10 +5,10 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
  * instead of swallowing them — a silent failure reads as "the button does
  * nothing", which is worse than a clear message. Returns whether it worked.
  */
-export async function postAction(path: string, body?: unknown): Promise<boolean> {
+export async function postAction(path: string, body?: unknown, method: "POST" | "PATCH" = "POST"): Promise<boolean> {
   try {
     const res = await fetch(`${API_URL}${path}`, {
-      method: "POST",
+      method,
       ...(body === undefined ? {} : { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
     });
     if (res.ok) return true;

@@ -75,6 +75,9 @@ export type ProofOfPayable = {
   status: "READY";
 };
 
+export type ActivityEntry = { id: number; occurredAt: string; message: string };
+export type DemoVariant = { index: number; label: string };
+
 async function apiFetch<T>(path: string): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, { cache: "no-store" });
   if (!res.ok) throw new Error(`API ${path} responded ${res.status}`);
@@ -91,6 +94,14 @@ export function getVendors(): Promise<Vendor[]> {
 
 export function getSummary(): Promise<Summary> {
   return apiFetch("/summary");
+}
+
+export function getActivity(): Promise<ActivityEntry[]> {
+  return apiFetch("/activity");
+}
+
+export function getDemoVariants(): Promise<DemoVariant[]> {
+  return apiFetch("/demo/variants");
 }
 
 /** `null` if the payable doesn't exist or isn't READY yet (API returns 404/409 for those). */

@@ -80,3 +80,27 @@ export async function recordSettlement(db: Db, input: RecordSettlementInput, now
 
   return (await getSettlement(db, input.payableId))!;
 }
+
+export class NoSettlementError extends Error {}
+
+/**
+ * Demo-only reconciliation step: the ERP posting is asynchronous in real
+ * life (Dev 1's adapter reports `settled`, the ERP confirms later), so the
+ * UI needs a way to move a settlement from PENDING to RECONCILED (or
+ * FAILED) without re-running `recordSettlement`, which refuses a payable
+ * that's already settled.
+ */
+export async function updateErpPostingStatus(
+  db: Db,
+  payableId: string,
+  erpPostingStatus: "PENDING" | "RECONCILED" | "FAILED",
+): Promise<Settlement> {
+  if (!(await getSettlement(db, payableId))) {
+    throw new NoSettlementError(`payable ${payableId} has no settlement to update`);
+  }
+  await db.query(`UPDATE ${db.schema}.settlements SET erp_posting_status = $2 WHERE payable_id = $1`, [
+    payableId,
+    erpPostingStatus,
+  ]);
+  return (await getSettlement(db, payableId))!;
+}

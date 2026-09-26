@@ -41,7 +41,7 @@ export function WalletActions({
         <button
           onClick={attestWallet}
           disabled={pending !== null}
-          className="rounded-full bg-accent px-2.5 py-1 text-xs font-medium text-accent-foreground hover:opacity-90 disabled:opacity-50"
+          className="app-button-primary"
         >
           {pending === "attest" ? "Atestiguando…" : "Atestiguar"}
         </button>
@@ -49,7 +49,7 @@ export function WalletActions({
       <button
         onClick={registerWallet}
         disabled={pending !== null}
-        className="rounded-full bg-background px-2.5 py-1 text-xs font-medium text-muted hover:text-foreground disabled:opacity-50"
+        className="app-button-secondary"
       >
         {pending === "register" ? "Registrando…" : "Cambiar wallet"}
       </button>

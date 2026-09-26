@@ -43,13 +43,13 @@ export function PolicyInfo() {
     <div className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex h-6 w-6 items-center justify-center rounded-full text-xs text-muted hover:text-foreground"
+        className="flex h-7 w-7 items-center justify-center rounded-full border border-border font-mono text-xs text-muted transition-colors hover:border-foreground hover:text-foreground"
         aria-label="Policy"
       >
         ⓘ
       </button>
       {open && (
-        <div className="absolute right-0 top-8 z-20 w-72 rounded-2xl bg-surface p-4 shadow-[var(--shadow)]">
+        <div className="policy-popover absolute right-0 top-9 z-20 w-72 p-4">
           {!policy ? (
             <p className="text-xs text-muted">Cargando…</p>
           ) : (
