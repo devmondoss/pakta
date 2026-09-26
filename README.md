@@ -70,6 +70,16 @@ Excel / CSV / PDF / Email / Accounting App
 
 La IA nunca es la autoridad final sobre el dinero: **interpreta y propone**, pero un **kernel de verificación determinístico** decide si el payable puede liquidarse. Esa es la distinción central de Pakta frente a "un LLM con acceso al treasury".
 
+### Recorrido de la demo
+
+1. En **Cargar dataset**, elegí una industria. Pakta ingesta un lote nuevo con IDs únicos para esa corrida y lo evalúa contra la política vigente.
+2. Las obligaciones con evidencia completa quedan en `READY`; las que no cumplen muestran una excepción concreta, su responsable y la acción necesaria para resolverla.
+3. Cuando el settlement de testnet está habilitado, Pakta envía los payables `READY` **uno por uno** a `PayableGate`. La secuencia evita colisiones de nonce de la cuenta ejecutora de Stellar.
+4. Cada settlement exitoso se vincula con su `tx_hash`, ledger y `proof_hash`; el conector de demo marca automáticamente el posteo ERP como `RECONCILED`.
+5. El diálogo de cierre aparece solo cuando ya no quedan payables `READY` de esa corrida. Muestra la cantidad y el **total acumulado de todos los pagos liquidados**, no solo el último.
+
+El lote puede contener de 5 a 10 facturas: las excepciones se mantienen visibles como casos de control y los payables `READY` recorren automáticamente settlement y reconciliación. La notificación de cierre es una simulación visual del demo; la transacción de Stellar y los registros de actividad sí quedan trazados.
+
 ### El caso que resume la tesis: `VENDOR_WALLET_CHANGED`
 
 Invoice, PO, receipt, monto, presupuesto y firma del agente pueden estar perfectos — pero si el proveedor cambió su wallet de destino, esa relación **todavía no está probada**. Pakta bloquea el pago, crea una excepción con owner (`Vendor Master / Treasury`) y acción requerida (`Reverify wallet ownership`), y **revalida automáticamente** en cuanto se confirma la nueva wallet.
