@@ -1,15 +1,18 @@
-import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import ExcelJS from "exceljs";
-import { encodeAccountId } from "@pakta/stellar-sdk-wrapper";
 
 const fixturesDir = path.resolve(import.meta.dirname, "../../../fixtures/demo-workbook");
 const baseData = JSON.parse(readFileSync(path.join(fixturesDir, "demo-data.json"), "utf-8"));
+const settlementWallets: string[] = baseData.vendors.map((vendor: { wallet: { address: string } }) => vendor.wallet.address);
 
 export type DemoVariant = {
   label: string;
+  /** Código visible en PO e invoice para que el caso se lea como una operación del rubro. */
+  documentCode: string;
   vendorNames: [string, string, string, string, string];
+  basePurchaseOrders: [string, string, string, string, string];
+  baseInvoices: [string, string, string, string, string];
   /** Pool this sector can draw extra (always-clean) vendors from — up to 5, for a 5-10 invoice range per run. */
   extraVendorPool: string[];
 };
@@ -46,27 +49,42 @@ function scaleDemoAmount(amount: string): string {
 export const DEMO_VARIANTS: DemoVariant[] = [
   {
     label: "Cloud & logística",
-    vendorNames: ["CloudData Inc.", "Northline Supplies", "Meridian Logistics", "Arclight Components", "Harborview Services"],
+    documentCode: "CLD",
+    vendorNames: ["Andes Cloud Compute", "Ruta Norte Logística", "Meridian Freight", "Nodo Andino Hardware", "Puerto Sur Fulfillment"],
+    basePurchaseOrders: ["PO-CLD-COMPUTE-2401", "PO-CLD-FREIGHT-2402", "PO-CLD-TRANSIT-2403", "PO-CLD-HARDWARE-2404", "PO-CLD-FULFILL-2405"],
+    baseInvoices: ["INV-CLD-2401", "INV-CLD-2402", "INV-CLD-2403", "INV-CLD-2404", "INV-CLD-2405"],
     extraVendorPool: ["Latticework Hosting", "Pinecrest Freight", "Vantage Colo", "Ironhaul Transport", "Skyline Data Centers"],
   },
   {
     label: "Agroindustria",
+    documentCode: "AGR",
     vendorNames: ["AgroPacífico Ltda.", "Semillas del Valle", "Exportadora Cafetal", "Fertilizantes Norte", "Cosecha Real"],
+    basePurchaseOrders: ["PO-AGR-RIEGO-2401", "PO-AGR-SEMILLA-2402", "PO-AGR-COSECHA-2403", "PO-AGR-FERTIL-2404", "PO-AGR-EMPAQUE-2405"],
+    baseInvoices: ["INV-AGR-2401", "INV-AGR-2402", "INV-AGR-2403", "INV-AGR-2404", "INV-AGR-2405"],
     extraVendorPool: ["Molinos del Sur", "Vivero Altamira", "Empaques Agroluz", "Riegos Cordillera", "Silos del Llano"],
   },
   {
     label: "Construcción",
+    documentCode: "CNS",
     vendorNames: ["Cementos Altiplano", "Aceros del Puerto", "Maderera San Rafael", "Instalaciones Vertex", "Concreto Total"],
+    basePurchaseOrders: ["PO-CNS-CEMENTO-2401", "PO-CNS-ACERO-2402", "PO-CNS-MADERA-2403", "PO-CNS-MEP-2404", "PO-CNS-CONCRETO-2405"],
+    baseInvoices: ["INV-CNS-2401", "INV-CNS-2402", "INV-CNS-2403", "INV-CNS-2404", "INV-CNS-2405"],
     extraVendorPool: ["Andamios Nortec", "Vidrios Marbella", "Eléctricos del Cauca", "Pinturas Cimarrón", "Grúas Peñalisa"],
   },
   {
     label: "Salud",
+    documentCode: "SAL",
     vendorNames: ["Insumos Médicos Vitalia", "Farmacéutica Andesalud", "Laboratorios Bioquim", "Equipos Clínicos Norsan", "Distribuidora Sanare"],
+    basePurchaseOrders: ["PO-SAL-INSUMOS-2401", "PO-SAL-FARMA-2402", "PO-SAL-LAB-2403", "PO-SAL-EQUIPO-2404", "PO-SAL-ABASTO-2405"],
+    baseInvoices: ["INV-SAL-2401", "INV-SAL-2402", "INV-SAL-2403", "INV-SAL-2404", "INV-SAL-2405"],
     extraVendorPool: ["Suministros Cruz Azul", "Diagnóstica Prisma", "Ortopédicos Alameda", "Biotecnología Alterra", "Insumos Nortemed"],
   },
   {
     label: "Tecnología",
+    documentCode: "TEC",
     vendorNames: ["Nimbus Data Systems", "Redshift Analytics", "Vector Cloud Co.", "Quanta Infra", "Latencia Cero SpA"],
+    basePurchaseOrders: ["PO-TEC-SAAS-2401", "PO-TEC-DATA-2402", "PO-TEC-CLOUD-2403", "PO-TEC-INFRA-2404", "PO-TEC-NETWORK-2405"],
+    baseInvoices: ["INV-TEC-2401", "INV-TEC-2402", "INV-TEC-2403", "INV-TEC-2404", "INV-TEC-2405"],
     extraVendorPool: ["Cipher Security Labs", "Parallax Devtools", "Northbeam Analytics", "Monolith Storage", "Edge Relay Systems"],
   },
 ];
@@ -93,21 +111,19 @@ function shuffledSample<T>(items: T[], count: number): T[] {
  * batch siempre puede tener entre 5 y 10 invoices sin arriesgar que una de
  * las 4 excepciones documentadas se rompa o se duplique por accidente.
  *
- * La wallet tiene que ser una StrKey `G...` válida de verdad — no alcanza
- * con que "parezca" una: `buildProofOfPayable` valida el checksum real, y
- * un string random con el prefijo pegado a mano lo rechazaba ahí (el
- * kernel no lo detecta porque no valida formato, solo atestación, así que
- * el payable llegaba a READY y recién se rompía al pedir el proof). No es
- * una cuenta fondeada en testnet — sirve para mostrar el proof, no para
- * liquidar de verdad esta wallet puntual.
+ * Cada extra usa una wallet sandbox existente, fondeada y con trustline de
+ * USDC testnet. Así el batch ampliado puede liquidarse de verdad; una StrKey
+ * aleatoria solo haría que el contrato retenga el compromiso y falle recién
+ * en el transfer. La identidad de proveedor sigue siendo distinta; la wallet
+ * es infraestructura compartida exclusivamente para este demo.
  */
-function buildExtraInvoice(legalName: string, seq: number): ExtraInvoice {
+function buildExtraInvoice(variant: DemoVariant, legalName: string, seq: number): ExtraInvoice {
   return {
     vendorId: `VEN-1${String(seq).padStart(2, "0")}`,
     legalName,
-    walletAddress: encodeAccountId(randomBytes(32)),
-    poId: `PO-9${String(seq).padStart(4, "0")}`,
-    invoiceId: `INV-1${String(seq).padStart(2, "0")}`,
+    walletAddress: settlementWallets[(seq - 1) % settlementWallets.length]!,
+    poId: `PO-${variant.documentCode}-OPER-25${String(seq).padStart(2, "0")}`,
+    invoiceId: `INV-${variant.documentCode}-25${String(seq).padStart(2, "0")}`,
     amount: randomAmount(),
   };
 }
@@ -132,7 +148,7 @@ export function pickVariant(index?: number, opts: { withExtras?: boolean } = {})
   if (!variant) throw new Error(`no demo variant at index ${index}`);
 
   const extraCount = withExtras ? Math.floor(Math.random() * (variant.extraVendorPool.length + 1)) : 0;
-  const extraInvoices = shuffledSample(variant.extraVendorPool, extraCount).map((name, i) => buildExtraInvoice(name, i + 1));
+  const extraInvoices = shuffledSample(variant.extraVendorPool, extraCount).map((name, i) => buildExtraInvoice(variant, name, i + 1));
 
   return { ...variant, extraInvoices, interactive: withExtras };
 }
@@ -169,6 +185,19 @@ function withVendorNames(variant: ResolvedDemoVariant) {
   // Solo esas corridas usan micro-settlements; el seed de arranque y los
   // tests siguen leyendo la fixture canónica sin alterarla.
   if (variant.interactive) {
+    const poByCanonicalId = new Map<string, string>();
+    for (const [index, po] of data.purchaseOrders.slice(0, variant.basePurchaseOrders.length).entries()) {
+      const sectorPoId = variant.basePurchaseOrders[index];
+      poByCanonicalId.set(po.poId, sectorPoId);
+      po.poId = sectorPoId;
+    }
+    for (const [index, invoice] of data.invoices.slice(0, variant.baseInvoices.length).entries()) {
+      invoice.invoiceId = variant.baseInvoices[index];
+      invoice.poId = poByCanonicalId.get(invoice.poId) ?? invoice.poId;
+      invoice.sourceHash = `sha256:demo-${variant.documentCode.toLowerCase()}-${String(index + 1).padStart(3, "0")}`;
+    }
+    for (const receipt of data.receipts) receipt.poId = poByCanonicalId.get(receipt.poId) ?? receipt.poId;
+    for (const approval of data.approvals) approval.objectId = poByCanonicalId.get(approval.objectId) ?? approval.objectId;
     for (const po of data.purchaseOrders) po.amount = scaleDemoAmount(po.amount);
     for (const invoice of data.invoices) invoice.amount = scaleDemoAmount(invoice.amount);
   }

@@ -146,8 +146,9 @@ export async function seedDemo(
   const workbookBuffer = await buildDemoWorkbookBuffer(variant);
   const outcome = await ingestAndPersist(db, workbookBuffer);
   const invoices = invoiceSummary(variant);
-  const duplicate = invoices.find((invoice) => invoice.invoiceId === "INV-002");
-  if (!duplicate) throw new Error("demo fixture is missing INV-002");
+  const duplicateInvoiceId = variant.interactive ? variant.baseInvoices[1] : "INV-002";
+  const duplicate = invoices.find((invoice) => invoice.invoiceId === duplicateInvoiceId);
+  if (!duplicate) throw new Error(`demo fixture is missing ${duplicateInvoiceId}`);
   await addKnownFingerprint(db, `VEN-002|${duplicate.amount}`, "INV-1994, recorded 11 days before the demo batch");
   await logActivity(db, `Caso cargado — ${variant.label} (${invoices.length} invoices)`);
   return { ...outcome, variantLabel: variant.label, invoices };
