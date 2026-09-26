@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { PromptDialog } from "@/components/PromptDialog";
 import { postAction } from "@/lib/postAction";
 
 export function WalletActions({
@@ -13,11 +14,10 @@ export function WalletActions({
 }) {
   const router = useRouter();
   const [pending, setPending] = useState<"register" | "attest" | null>(null);
+  const [showPrompt, setShowPrompt] = useState(false);
 
-  async function registerWallet() {
-    const address = window.prompt(`Nueva wallet para ${vendorId} (el vendor la reclama, todavía sin confirmar):`);
-    if (!address) return;
-
+  async function registerWallet(address: string) {
+    setShowPrompt(false);
     setPending("register");
     try {
       if (await postAction(`/vendors/${vendorId}/wallet`, { address })) router.refresh();
@@ -47,12 +47,22 @@ export function WalletActions({
         </button>
       )}
       <button
-        onClick={registerWallet}
+        onClick={() => setShowPrompt(true)}
         disabled={pending !== null}
         className="app-button-secondary"
       >
         {pending === "register" ? "Registrando…" : "Cambiar wallet"}
       </button>
+      {showPrompt && (
+        <PromptDialog
+          title="Cambiar wallet"
+          body={`Nueva wallet para ${vendorId} — el vendor la reclama, todavía sin confirmar.`}
+          placeholder="G..."
+          confirmLabel="Registrar"
+          onSubmit={registerWallet}
+          onCancel={() => setShowPrompt(false)}
+        />
+      )}
     </div>
   );
 }

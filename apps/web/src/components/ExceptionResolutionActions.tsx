@@ -2,15 +2,17 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { postAction } from "@/lib/postAction";
 
 /** DUPLICATE_INVOICE: AP revisó el fingerprint marcado y confirmó que no es un reenvío. */
 export function DismissDuplicateButton({ payableId }: { payableId: string }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   async function dismiss() {
-    if (!window.confirm("¿Confirmás que revisaste esta factura y NO es un duplicado?")) return;
+    setConfirming(false);
     setPending(true);
     try {
       if (await postAction(`/payables/${payableId}/dismiss-duplicate`)) router.refresh();
@@ -20,9 +22,20 @@ export function DismissDuplicateButton({ payableId }: { payableId: string }) {
   }
 
   return (
-    <button onClick={dismiss} disabled={pending} className="app-button-primary">
-      {pending ? "Descartando…" : "No es duplicado"}
-    </button>
+    <>
+      <button onClick={() => setConfirming(true)} disabled={pending} className="app-button-primary">
+        {pending ? "Descartando…" : "No es duplicado"}
+      </button>
+      {confirming && (
+        <ConfirmDialog
+          title="Descartar duplicado"
+          body="Confirmás que revisaste esta factura y NO es un duplicado."
+          confirmLabel="Confirmar"
+          onConfirm={dismiss}
+          onCancel={() => setConfirming(false)}
+        />
+      )}
+    </>
   );
 }
 
@@ -30,9 +43,10 @@ export function DismissDuplicateButton({ payableId }: { payableId: string }) {
 export function AmendPoButton({ payableId }: { payableId: string }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   async function amend() {
-    if (!window.confirm("¿Enmendar la PO para que coincida con el monto facturado?")) return;
+    setConfirming(false);
     setPending(true);
     try {
       if (await postAction(`/payables/${payableId}/amend-po`)) router.refresh();
@@ -42,8 +56,19 @@ export function AmendPoButton({ payableId }: { payableId: string }) {
   }
 
   return (
-    <button onClick={amend} disabled={pending} className="app-button-primary">
-      {pending ? "Enmendando…" : "Enmendar PO"}
-    </button>
+    <>
+      <button onClick={() => setConfirming(true)} disabled={pending} className="app-button-primary">
+        {pending ? "Enmendando…" : "Enmendar PO"}
+      </button>
+      {confirming && (
+        <ConfirmDialog
+          title="Enmendar PO"
+          body="La orden de compra va a quedar ajustada al monto facturado."
+          confirmLabel="Enmendar"
+          onConfirm={amend}
+          onCancel={() => setConfirming(false)}
+        />
+      )}
+    </>
   );
 }
