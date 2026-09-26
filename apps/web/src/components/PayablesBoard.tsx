@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { Payable, Vendor } from "@/lib/api";
 import { OnChainPanel } from "@/components/OnChainPanel";
 import { PayableCard, type PayableCardFocus } from "@/components/PayableCard";
 import { StatusBadge } from "@/components/StatusBadge";
+import { postAction } from "@/lib/postAction";
 import { pushToast } from "@/lib/toast";
 import { blockedNarrative, reasonLabel } from "@/lib/reasoning";
 
+const AUTO_SETTLE_DELAY_MS = 1500;
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
 /**
@@ -66,13 +69,24 @@ export function PayablesBoard({
   /** Se llama cuando una acción (propia o de otra pestaña) de verdad movió algo — quien escucha usa esto para volver a seguir el progreso real. */
   onProgress?: () => void;
 }) {
+  const router = useRouter();
   const [payables, setPayables] = useState(initialPayables);
   const [settlementEnabled, setSettlementEnabled] = useState(false);
   const payablesRef = useRef(payables);
+  // El disparador automático solo puede tener una liquidación en vuelo. La
+  // cuenta ejecutora de Stellar tiene secuencia estricta: el siguiente pago
+  // espera a que la red responda por el anterior.
+  const autoSettleInFlightRef = useRef(false);
+  const autoSettleStartedAtRef = useRef<number | null>(null);
+  const autoSettleSubmittedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     payablesRef.current = payables;
   }, [payables]);
   useEffect(() => {
+    const readyIds = new Set(initialPayables.filter((payable) => payable.status === "READY").map((payable) => payable.payableId));
+    for (const payableId of autoSettleSubmittedRef.current) {
+      if (!readyIds.has(payableId)) autoSettleSubmittedRef.current.delete(payableId);
+    }
     if (notifyTransitions(payablesRef.current, initialPayables)) onProgress?.();
     setPayables(initialPayables);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -104,6 +118,50 @@ export function PayablesBoard({
       clearInterval(id);
     };
   }, []);
+
+  // Settlement sigue siendo automático, pero nunca en ráfaga: elegimos el
+  // primer READY, esperamos un breve beat visual y solo entonces lo enviamos.
+  // Al terminar, el poll refleja el nuevo estado y recién ahí se toma el
+  // siguiente. Así no se reutiliza en paralelo la secuencia de la cuenta
+  // ejecutora ni aparece TRY_AGAIN_LATER.
+  useEffect(() => {
+    if (stage !== 4 || !settlementEnabled) {
+      autoSettleStartedAtRef.current = null;
+      return;
+    }
+
+    const id = setInterval(() => {
+      if (autoSettleInFlightRef.current) return;
+      const next = payablesRef.current.find(
+        (payable) => payable.status === "READY" && !autoSettleSubmittedRef.current.has(payable.payableId),
+      );
+      if (!next) {
+        autoSettleStartedAtRef.current = null;
+        return;
+      }
+
+      const now = Date.now();
+      if (autoSettleStartedAtRef.current === null) {
+        autoSettleStartedAtRef.current = now;
+        return;
+      }
+      if (now - autoSettleStartedAtRef.current < AUTO_SETTLE_DELAY_MS) return;
+
+      autoSettleInFlightRef.current = true;
+      autoSettleStartedAtRef.current = null;
+      postAction(`/payables/${encodeURIComponent(next.payableId)}/settle`)
+        .then((ok) => {
+          if (!ok) return;
+          autoSettleSubmittedRef.current.add(next.payableId);
+          router.refresh();
+        })
+        .finally(() => {
+          autoSettleInFlightRef.current = false;
+        });
+    }, 300);
+
+    return () => clearInterval(id);
+  }, [stage, settlementEnabled, router]);
 
   // Polls independently of navigation — a resolved exception (or a
   // settlement Dev 1 reports) shows up here on its own, without anyone
