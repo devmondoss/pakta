@@ -187,6 +187,15 @@ El seed del issuer se pasa por variable de entorno y nunca se escribe en el repo
 | **Upgrade tx** | [`67867c2f…531220`](https://stellar.expert/explorer/testnet/tx/67867c2f3b7f425cc3b614d0ab6569b027890e22d313108581f7a0885b531220) — ejercitado on-chain, estado preservado |
 | **Estado** | Inicializado como vault con caps; consulta `get_available` y `get_committed` para el saldo actual |
 
+Verificación del 25-09-2026: `contract_version` devuelve `4`, `get_config`
+coincide con el manifiesto, `get_committed` devuelve `0` y `get_available`
+devuelve `610000000000` unidades del token demo (61 000 USDC). Estos saldos
+pueden cambiar. La compilación local de este checkout produjo el hash WASM
+`3fadb82d208307ef52412056f86d147bbf84e26c7aa19b7c6431ebbfdd1ab791`,
+distinto del hash desplegado. El contrato vigente sigue siendo el v4 del
+manifiesto; una actualización requiere revisar esa diferencia y la firma del
+admin, no solo reemplazar el hash en el JSON.
+
 El gate v3 (`CDKC6UYM…`) se retiró recuperando todo su float (89 000 USDC) con su propio
 `withdraw()` antes de fondear v4: no quedó nada atrapado.
 
